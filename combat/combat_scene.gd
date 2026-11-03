@@ -1,4 +1,6 @@
 extends Control
+const Shell = preload("res://global/game_shell.gd")
+@onready var shell: Shell = get_node("/root/GameShell")
 
 const Rules = preload("res://combat/battle_state.gd")
 const Actor = preload("res://combat/battle_actor.gd")
@@ -39,6 +41,7 @@ var hero_hp := [180.0, 124.0]
 var bgm: AudioStreamPlayer
 var impact: AudioStreamPlayer
 var live_tweens: Array[Tween] = []
+var save_checkpoint: Dictionary = {}
 
 func _ready() -> void:
 	font = ThemeDB.fallback_font
@@ -76,6 +79,7 @@ func _ready() -> void:
 	impact.volume_db = -9
 	add_child(impact)
 	_show_commands()
+	shell.register_scene(self)
 
 func _new_button(text: String, bounds: Rect2, callback: Callable, enabled: bool = true) -> Button:
 	var button := Button.new()
@@ -108,16 +112,17 @@ func _show_commands() -> void:
 		_show_outcome()
 		return
 	phase = "select"
+	save_checkpoint = _snapshot()
 	var actor: int = battle.turn_cursor
 	var actions: Array[Dictionary] = battle.actions(actor)
 	for i in range(actions.size()):
 		var action: Dictionary = actions[i]
 		var cost := "%d MP" % action.cost if action.cost > 0 else ("x%d" % battle.tonics if action.id == "tonic" else "FREE")
-		var button := _new_button("%d   %s     %s" % [i + 1, action.name, cost], Rect2(447 + (i % 2) * 359, 590 + (i / 2) * 51, 345, 43), func(): choose_action(i), battle.can_use(actor, action))
+		var button := _new_button("%s   %s     %s" % [shell.key_name("command_%d" % (i + 1)), action.name, cost], Rect2(447 + (i % 2) * 359, 590 + (i / 2) * 51, 345, 43), func(): choose_action(i), battle.can_use(actor, action))
 		button.tooltip_text = action.description
 		button.mouse_entered.connect(func(): description = action.description)
 	description = "Choose an action. Accuracy grants up to 2x damage; support skills scale too."
-	_new_button("Rhythm Lab  /  F8", Rect2(991, 23, 178, 34), _open_lab)
+	_new_button("Rhythm Lab / " + shell.key_name("switch_mode"), Rect2(991, 23, 178, 34), _open_lab)
 	_new_button("Restart encounter", Rect2(806, 23, 174, 34), restart)
 	queue_redraw()
 
@@ -135,8 +140,8 @@ func choose_action(index: int) -> void:
 		description = action.description
 		for i in range(2):
 			var hero: Dictionary = battle.party[i]
-			_new_button("%d   %s   %d / %d HP" % [i + 1, hero.name, hero.hp, hero.max_hp], Rect2(447 + i * 359, 617, 345, 55), func(): choose_target(i), action.id == "tonic" or hero.hp > 0)
-		_new_button("Back  /  Esc", Rect2(447, 689, 180, 40), _show_commands)
+			_new_button("%s   %s   %d / %d HP" % [shell.key_name("command_%d" % (i + 1)), hero.name, hero.hp, hero.max_hp], Rect2(447 + i * 359, 617, 345, 55), func(): choose_target(i), action.id == "tonic" or hero.hp > 0)
+		_new_button("Back / " + shell.key_name("back"), Rect2(447, 689, 230, 40), _show_commands)
 	else:
 		_begin_action()
 
@@ -216,7 +221,7 @@ func _resolve_player(accuracy: float) -> void:
 	await back.finished
 	if token != generation:
 		return
-	await get_tree().create_timer(0.36).timeout
+	await get_tree().create_timer(0.36, false).timeout
 	if token != generation:
 		return
 	_update_poses()
@@ -239,7 +244,7 @@ func _enemy_turn() -> void:
 	var token := generation
 	var announced: Dictionary = battle.intent()
 	banner = str(announced.name)
-	await get_tree().create_timer(0.4).timeout
+	await get_tree().create_timer(0.4, false).timeout
 	if token != generation:
 		return
 	var event: Dictionary = battle.apply_enemy()
@@ -248,7 +253,7 @@ func _enemy_turn() -> void:
 		_popup("BURN %d" % event.burn, foe.position + Vector2(0, -160), Color("ffa374"))
 		_effect("fire", foe.position + Vector2(0, -90))
 	if battle.outcome == "victory":
-		await get_tree().create_timer(0.5).timeout
+		await get_tree().create_timer(0.5, false).timeout
 		if token == generation:
 			_show_outcome()
 		return
@@ -275,7 +280,7 @@ func _enemy_turn() -> void:
 	await back.finished
 	if token != generation:
 		return
-	await get_tree().create_timer(0.4).timeout
+	await get_tree().create_timer(0.4, false).timeout
 	if token != generation:
 		return
 	_update_poses()
@@ -290,6 +295,7 @@ func _update_poses() -> void:
 
 func _show_outcome() -> void:
 	phase = battle.outcome
+	save_checkpoint = _snapshot()
 	rhythm.cancel()
 	_clear_buttons()
 	_update_poses()
@@ -298,8 +304,8 @@ func _show_outcome() -> void:
 			if battle.party[i].hp > 0:
 				heroes[i].play(13)
 	banner = "The path is clear." if phase == "victory" else "The melody fades. Try a different arrangement."
-	_new_button("Play again  /  R", Rect2(389, 420, 210, 45), restart)
-	_new_button("Rhythm Lab  /  F8", Rect2(613, 420, 210, 45), _open_lab)
+	_new_button("Play again / " + shell.key_name("replay"), Rect2(389, 420, 210, 45), restart)
+	_new_button("Rhythm Lab / " + shell.key_name("switch_mode"), Rect2(613, 420, 210, 45), _open_lab)
 
 func restart() -> void:
 	generation += 1
@@ -382,20 +388,112 @@ func _process(delta: float) -> void:
 	queue_redraw()
 
 func _unhandled_key_input(event: InputEvent) -> void:
-	if not event is InputEventKey or not event.pressed or event.echo:
+	if not event is InputEventKey or not event.pressed or event.echo or shell.is_pause_event(event):
 		return
-	var code: int = event.physical_keycode
-	if code == KEY_F8 and phase != "rhythm":
+	if shell.matches(event, "switch_mode") and phase != "rhythm":
 		_open_lab()
-	elif phase == "select" and code >= KEY_1 and code <= KEY_5:
-		choose_action(code - KEY_1)
-	elif phase == "target":
-		if code in [KEY_1, KEY_2]:
-			choose_target(code - KEY_1)
-		elif code == KEY_ESCAPE:
+	elif phase in ["select", "target"]:
+		if phase == "target" and shell.matches(event, "back"):
 			_show_commands()
-	elif phase in ["victory", "defeat"] and code == KEY_R:
+		else:
+			for index in range(5 if phase == "select" else 2):
+				if shell.matches(event, "command_%d" % (index + 1)):
+					if phase == "select":
+						choose_action(index)
+					else:
+						choose_target(index)
+					break
+	elif phase in ["victory", "defeat"] and shell.matches(event, "replay"):
 		restart()
+
+func refresh_bindings() -> void:
+	if phase == "select":
+		_show_commands()
+	elif phase in ["victory", "defeat"]:
+		_show_outcome()
+	elif phase == "target":
+		# Recreate target prompts without changing the selected skill.
+		var index: int = 4 if selected_action.id == "tonic" else 2
+		phase = "select"
+		choose_action(index)
+	rhythm.queue_redraw()
+	queue_redraw()
+
+func sync_after_pause(_duration_usec: int) -> void:
+	rhythm.held = shell.held_mask(rhythm.instrument)
+
+func _snapshot() -> Dictionary:
+	return {"party": battle.party.duplicate(true), "enemy": battle.enemy.duplicate(true),
+		"round": battle.round_number, "turn": battle.turn_cursor, "tonics": battle.tonics,
+		"outcome": battle.outcome, "history": history.duplicate(), "resonance": resonance.duplicate(),
+		"summary": "Round %d · %s" % [battle.round_number, "Command" if battle.outcome.is_empty() else str(battle.outcome).capitalize()]}
+
+func make_save() -> Dictionary:
+	return save_checkpoint.duplicate(true)
+
+static func valid_save(data: Dictionary) -> bool:
+	if not data.get("party") is Array or data.party.size() != 2 or not data.get("enemy") is Dictionary:
+		return false
+	var template = Rules.new()
+	for i in range(2):
+		if not data.party[i] is Dictionary:
+			return false
+		var hero: Dictionary = data.party[i]
+		for key in template.party[i]:
+			if not hero.has(key):
+				return false
+			if key not in ["hp", "mp", "shield", "guard"] and hero[key] != template.party[i][key]:
+				return false
+		if not _in_range(hero.hp, 0, hero.max_hp) or not _in_range(hero.mp, 0, hero.max_mp) or not _in_range(hero.shield, 0, 1000) or not hero.guard is bool:
+			return false
+	for key in template.enemy:
+		if not data.enemy.has(key):
+			return false
+		if key not in ["hp", "burn", "burn_turns", "exposed", "exposed_turns"] and data.enemy[key] != template.enemy[key]:
+			return false
+	if not _in_range(data.enemy.hp, 0, 650) or not _in_range(data.enemy.burn, 0, 100) or not _in_range(data.enemy.burn_turns, 0, 2) or not _in_range(data.enemy.exposed, 0, 1, false) or not _in_range(data.enemy.exposed_turns, 0, 2):
+		return false
+	if not _in_range(data.get("round"), 1, 100000) or not _in_range(data.get("turn"), 0, 2) or not _in_range(data.get("tonics"), 0, 2) or data.get("outcome") not in ["", "victory", "defeat"]:
+		return false
+	if data.outcome.is_empty() and (data.turn == 2 or data.party[int(data.turn)].hp <= 0 or data.enemy.hp <= 0):
+		return false
+	if data.outcome == "victory" and data.enemy.hp != 0:
+		return false
+	if data.outcome == "defeat" and (data.party[0].hp > 0 or data.party[1].hp > 0):
+		return false
+	if not data.get("history") is Array or not data.get("resonance") is Array:
+		return false
+	for entry in data.history:
+		if not entry is String:
+			return false
+	for value in data.resonance:
+		if not _in_range(value, 0, 1, false):
+			return false
+	return true
+
+static func _in_range(value: Variant, low: float, high: float, integer: bool = true) -> bool:
+	return (value is int or value is float) and is_finite(float(value)) and value >= low and value <= high and (not integer or value == floor(value))
+
+func restore_save(data: Dictionary) -> void:
+	if not valid_save(data):
+		return
+	restart()
+	for i in range(2):
+		for key in battle.party[i]:
+			battle.party[i][key] = int(data.party[i][key]) if battle.party[i][key] is int else data.party[i][key]
+	for key in battle.enemy:
+		battle.enemy[key] = int(data.enemy[key]) if battle.enemy[key] is int else data.enemy[key]
+	battle.round_number = int(data.round)
+	battle.turn_cursor = int(data.turn)
+	battle.tonics = int(data.tonics)
+	battle.outcome = data.outcome
+	history.assign(data.history)
+	resonance.assign(data.resonance)
+	enemy_hp = battle.enemy.hp
+	hero_hp = [float(battle.party[0].hp), float(battle.party[1].hp)]
+	battle.last_event = "Save loaded. Choose your next action."
+	_update_poses()
+	_show_commands()
 
 func _box(fill: Color, border: Color = Color("57605c")) -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()
@@ -425,7 +523,7 @@ func _draw() -> void:
 	draw_rect(Rect2(0, 0, 1200, 82), Color(0.025, 0.045, 0.06, 0.88))
 	draw_line(Vector2(32, 81), Vector2(1168, 81), Color("7c8268"), 1)
 	_text("T H E   H O L L O W   P A S S A G E", Vector2(33, 35), 19, GOLD)
-	_text("WOODLAND SENTINEL  /  A RHYTHMPG ENCOUNTER", Vector2(33, 62), 12, MUTED)
+	_text("WOODLAND SENTINEL  /  RHYTHMPG  /  ESC PAUSE", Vector2(33, 62), 12, MUTED)
 	_text("ROUND %02d" % battle.round_number, Vector2(623, 47), 21)
 	# Enemy identity, HP, statuses, and telegraphed intent stay visible.
 	draw_style_box(_box(Color(0.045, 0.07, 0.09, 0.91)), Rect2(35, 109, 355, 131))

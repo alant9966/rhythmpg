@@ -10,19 +10,48 @@ and defeat poses; packed effect atlases provide impacts, fire, shielding, and he
 
 ## Playing the encounter
 
+- **Esc** opens a global pause menu in combat and practice. Resume, save/load,
+  edit keybindings, read the rhythm guide, or exit from this menu. **P** is a
+  second pause shortcut by default. The scene, enemy timers, animations, and
+  audio all freeze. Resume includes a 0.85-second countdown to ready your hands.
 - Click a command or press **1–5**. Healing and tonics then ask for ally **1/2**.
 - **Warrior:** hold the displayed **S/D/F** shape for the whole action and strum
   with **Down/Up arrows**. Each action repeats the familiar D D U U D U pattern.
 - **Mage:** use **D/F/J/K** for the falling notes, chords, and brief holds.
-- Battle performances use **120 BPM**, a **0.65-second pickup**, and one bar,
-  taking about **2.65 seconds**. Commands stay in the same lower panel as the
+- Every performance opens the **full rhythm view immediately**, showing its
+  keys/chord and hit line with an **empty play area for one second**. Notes then
+  begin approaching, with no separate preparation screen or countdown. Battle performances use
+  **120 BPM**, a **0.65-second pickup**, and one bar, taking **2.65 seconds**
+  after the empty opening. Commands stay in the same lower panel as the
   performance, keeping the battlefield visible. The longer practice charts remain available.
-- **P** pauses a performance (focus loss also pauses). **Escape** resolves the
-  action at 0% accuracy. It still spends MP and has its baseline effect.
+- Focus loss also opens global pause. **Backspace** deliberately resolves a
+  combat performance at 0% accuracy; the action spends MP and keeps its baseline
+  effect. Esc always pauses without forfeiting. Backspace also returns from ally
+  targeting and resets a practice phrase.
 - **F8** switches between combat and Rhythm Lab, starting a fresh encounter on
   return. **R** replays after victory/defeat. A restart button is available during command selection.
-- The timing offset set in Rhythm Lab carries into combat for the current game
-  session. It is not saved after closing the game.
+- Controls & keybindings lets you remap the instruments, strum directions,
+  commands/targets, and utility shortcuts. Click a binding and press a new key;
+  Esc cancels capture. Duplicate keys within one instrument or conflicting global
+  shortcuts are rejected. Piano and guitar may share keys. Restore Defaults is
+  available. All key prompts and instructions use the live bindings.
+- Keybindings and Rhythm Lab's timing offset persist across launches in
+  `user://controls.cfg`.
+
+### Save slots
+
+Open **Esc → Save / Load** to create, overwrite, or load one of **three slots**.
+Slots show a timestamp and encounter round/instrument. Saves are versioned JSON
+under `user://saves`, written via a temporary file with a backup during replacement.
+Invalid saves are rejected before the current scene changes.
+
+Combat saves capture the **latest command-selection point**, including HP/MP,
+shields, guard, enemy HP/statuses, turn, round, tonics, and performance history.
+Saving during an unfinished rhythm/action/enemy animation restores that last
+safe command point, replaying that action from selection. This prevents duplicate
+damage or item costs from partially completed animations. Finished battles can
+also be saved. Practice saves restore the selected instrument, ready to start
+a new phrase; they do not resume a partially completed practice chart.
 
 ### Example combat rules
 
@@ -45,7 +74,8 @@ health damage. Mending Chord restores 35–80 HP and requires a living target.
 Support bonuses scale with accuracy too. Missed performances retain baseline
 effects; perfect timing doubles direct attack damage. HP/MP and healing are capped.
 
-The battle is split into `combat/battle_state.gd` (rules), `combat/combat_scene.gd`
+The always-running `global/game_shell.gd` autoload owns pause, controls, settings,
+and save/load. The battle is split into `combat/battle_state.gd` (rules), `combat/combat_scene.gd`
 (turn flow and HUD), `combat/combat_rhythm.gd` (compact performance using the same
 `RhythmSession` as practice), and actor/stage presentation scripts. Placeholder
 music, note samples, and impact audio are generated originally by the included tool.
@@ -54,6 +84,12 @@ Run `godot --headless --path . --script tests/test_combat.gd` for combat rules,
 all skill paths, full victory through instrument input, real-time audio completion,
 revival, replay, defeat, and packed-atlas checks. Render battle previews with
 `godot --path . --rendering-method gl_compatibility --script tests/preview_combat.gd`.
+
+Run `godot --headless --path . --script tests/test_shell.gd` for global pause,
+resume countdown, preparation, rebinding persistence/conflicts, slot creation,
+overwrite, load, validation, and paused enemy/rhythm timing. It uses slots 1/2;
+run it with an isolated user-data directory when preserving personal saves.
+`tests/preview_pause.gd` renders the menu pages and empty rhythm opening.
 
 ## Standalone rhythm practice
 
@@ -66,17 +102,19 @@ beats; notes arrive at the white hit line on the following beat.
 | --- | --- |
 | Piano / Chordfall | D, F, J, K play the four lanes. Press simultaneous notes together. Hold keys through long tails. |
 | Guitar / Strumline | Hold S, D, F chord shapes. DOWN ARROW strums down (`v`); UP ARROW strums up (`^`). Keep the same shape for each three-second bar. |
-| Both | P pauses/resumes. Escape or Reset clears the phrase. Start/Restart replays from the beginning. |
+| Both | Esc or P opens global pause. Backspace or Reset clears the phrase. Start/Restart replays from the beginning. |
 
 The game automatically pauses on focus loss. To resume a sustain, re-hold its
-keys while paused, then press P. Timing offset is adjustable from -250 to +250 ms;
+keys during the resume countdown. Timing offset is adjustable from -250 to +250 ms;
 positive values accept later input. This setting shifts judgment, not the note
 display. Mute preserves the audio clock so silent practice still works.
 
 Guitar runs at a relaxed **80 BPM**, so each four-beat bar lasts exactly **three
 seconds**. Hold **S+D → D+F → S+F → S+D**, changing shape once per bar.
-The current shape, next shape, and change countdown appear on the left; gold
-rings identify the required fret keys. Only strum cues fall toward the hit line.
+The current shape, next shape, and change countdown appear on the left. Required
+frets are highlighted across their full area in gold, turning green when held;
+an incorrect held fret turns red. Full up/down arrows show strum directions in
+both practice and combat. Only strum cues fall toward the hit line in practice.
 Frets can be prepared freely; they are checked when you strum, rather than judged
 as separate timed notes. The same common **down, down-up, up, down-up** pattern
 repeats in every bar, on counts **1, 2, & of 2, & of 3, 4, & of 4**.
@@ -110,8 +148,8 @@ Piano remains at **100 BPM**.
 To integrate later, instantiate the scene, connect `performance_finished`, and
 call `start_performance("piano")` or `start_performance("guitar")`. The signal
 returns an instrument ID, normalized `accuracy` (0–1), perfect/good/miss counts,
-broken holds, stray inputs, maximum combo, and note count. Escape cancels without
-emitting a completed result. No combat formulas or game-state dependencies exist.
+broken holds, stray inputs, maximum combo, and note count. Backspace cancels practice
+without emitting a completed result; Esc opens pause. No combat formulas exist in the rhythm scorer.
 
 Custom charts can be supplied as the second argument and a matching non-looping
 `AudioStream` as the third. Each chart entry contains `time` (seconds from audio
@@ -132,7 +170,7 @@ hold release, both complete charts, zero-input completion, and the scene's input
 pause, reset, replay, and completion flow.
 
 `godot --headless --path . --script tests/test_realtime.gd` also verifies both
-phrases against actual audio playback, including pause and completion (~34 seconds).
+phrases against actual audio playback, including preparation, pause and completion (~38 seconds).
 
 Optional visual check: `godot --path . --rendering-method gl_compatibility
 --script tests/preview_rhythm.gd` writes preview PNGs under `tests/`.

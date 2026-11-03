@@ -1,9 +1,12 @@
 extends SceneTree
+const Shell = preload("res://global/game_shell.gd")
+var shell: Shell
 ## Exercise the actual audio clock and end-of-phrase flow (~34 seconds).
 func _initialize() -> void:
 	call_deferred("run")
 
 func run() -> void:
+	shell = root.get_node("GameShell")
 	var lab = load("res://scenes/rhythm_lab.tscn").instantiate()
 	root.add_child(lab)
 	await process_frame
@@ -17,8 +20,8 @@ func run() -> void:
 		if not is_equal_approx(lab.song_time, paused_time):
 			push_error(mode + " clock advanced while paused")
 			failures += 1
-		lab._toggle_pause()
-		await create_timer(16.5).timeout
+		shell.resume_game(false)
+		await create_timer(18.0).timeout
 		if lab.running or lab.results.is_empty():
 			push_error(mode + " did not finish from real audio playback")
 			failures += 1

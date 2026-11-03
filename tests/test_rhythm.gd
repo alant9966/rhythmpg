@@ -1,4 +1,6 @@
 extends SceneTree
+const Shell = preload("res://global/game_shell.gd")
+var shell: Shell
 
 const Session = preload("res://rhythm/rhythm_session.gd")
 const Charts = preload("res://rhythm/practice_charts.gd")
@@ -18,6 +20,7 @@ func _initialize() -> void:
 	call_deferred("run")
 
 func run() -> void:
+	shell = root.get_node("GameShell")
 	var session = Session.new()
 	var chord: Array[Dictionary] = [note(1, 1), note(1, 4)]
 	session.setup("piano", chord)
@@ -105,6 +108,7 @@ func run() -> void:
 	root.add_child(lab)
 	await process_frame
 	lab.start_performance("piano")
+	lab.preparation_left = 0
 	lab.song_time = 4 * Charts.BEAT
 	key(lab, KEY_A, true)
 	check(lab.session.perfect == 0 and lab.held_mask == 0, "Old piano A key is inactive")
@@ -119,10 +123,12 @@ func run() -> void:
 		check(lab.session.perfect == lane + 1, "Piano D/F/J/K lane %d works" % lane)
 		key(lab, code, false)
 	lab._toggle_pause()
-	check(lab.paused and lab.music.stream_paused, "Pause suspends audio")
+	check(shell.is_open and paused and (not lab.music.playing or lab.music.stream_paused), "Global pause suspends gameplay and any playing audio")
+	shell.resume_game(false)
 	lab._reset()
 	check(not lab.running and not lab.paused and lab.session.perfect == 0, "Reset clears performance")
 	lab.start_performance("guitar")
+	lab.preparation_left = 0
 	lab.song_time = 4 * Charts.beat_seconds("guitar")
 	key(lab, KEY_S, true)
 	key(lab, KEY_D, true)

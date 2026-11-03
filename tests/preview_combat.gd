@@ -13,12 +13,12 @@ func capture() -> void:
 	await create_timer(0.3).timeout
 	await shot("commands")
 	scene.choose_action(1)
-	await create_timer(0.9).timeout
+	await create_timer(2.1).timeout
 	await shot("guitar")
 	scene.rhythm.resolve_now()
 	await create_timer(1.0).timeout
 	scene.choose_action(1)
-	await create_timer(0.9).timeout
+	await create_timer(2.1).timeout
 	await shot("piano")
 	scene.rhythm.resolve_now()
 	await create_timer(0.23).timeout

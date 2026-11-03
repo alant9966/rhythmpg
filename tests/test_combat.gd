@@ -121,7 +121,7 @@ func run() -> void:
 	check(scene.phase == "select" and scene.battle.enemy.hp == 650 and scene.battle.tonics == 2, "Replay resets battle and inventory")
 	# Use actual audio playback for one no-input phrase and its completion signal.
 	scene.choose_action(0)
-	await create_timer(3.6).timeout
+	await create_timer(5.1).timeout
 	check(scene.phase == "select" and scene.battle.turn_cursor == 1, "Real audio phrase completes and advances turn")
 	check(scene.battle.enemy.hp == 614, "No-input rhythm applies baseline attack")
 	scene.battle.party[0].hp = 100
@@ -180,6 +180,7 @@ func wait_for_command(scene: Node) -> void:
 	check(false, "Scene action flow timed out")
 
 func play_perfect(rhythm: Node) -> void:
+	rhythm.preparation_left = 0
 	var mode: String = rhythm.instrument
 	var chart: Array[Dictionary] = rhythm.session.notes.duplicate(true)
 	if mode == "guitar":

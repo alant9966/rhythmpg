@@ -1,10 +1,14 @@
 extends Control
+const Shell = preload("res://global/game_shell.gd")
+@onready var shell: Shell = get_node("/root/GameShell")
 ## Compact battle performance, reusing the standalone scoring engine.
 signal completed(result: Dictionary)
 const Session = preload("res://rhythm/rhythm_session.gd")
+const StrumVisuals = preload("res://rhythm/strum_visuals.gd")
 const BEAT := 0.5
 const LEAD := 0.65
 const END := LEAD + 4 * BEAT
+const EMPTY_RUNWAY_SECONDS := 1.0
 const COLORS := [Color("88dbd3"), Color("abc7ff"), Color("d3b0ec"), Color("f5cf85")]
 var session = Session.new()
 var instrument := "guitar"
@@ -20,6 +24,7 @@ var samples: Array[AudioStream] = []
 var font: Font
 var offset_ms := 0.0
 var title := ""
+var preparation_left := 0.0
 
 func _ready() -> void:
 	font = ThemeDB.fallback_font
@@ -61,7 +66,7 @@ func start(mode: String, action_name: String, mask: int = 3) -> void:
 		samples.append(load("res://audio/%s_%d.wav" % [mode, lane]))
 	player.stream = load("res://audio/combat_%s.wav" % mode)
 	player.stream_paused = false
-	player.play()
+	preparation_left = EMPTY_RUNWAY_SECONDS
 	active = true
 	show()
 	queue_redraw()
@@ -69,11 +74,12 @@ func start(mode: String, action_name: String, mask: int = 3) -> void:
 func cancel() -> void:
 	active = false
 	paused = false
+	preparation_left = 0.0
 	if player:
 		player.stop()
 	for voice in voices:
 		voice.stop()
-		hide()
+	hide()
 
 func resolve_now() -> void:
 	if not active:
@@ -86,8 +92,14 @@ func resolve_now() -> void:
 func _clock() -> float:
 	return maxf(time, player.get_playback_position() + AudioServer.get_time_since_last_mix() - AudioServer.get_output_latency())
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	if not active or paused:
+		return
+	if preparation_left > 0:
+		preparation_left = maxf(0, preparation_left - delta)
+		if preparation_left == 0:
+			player.play()
+		queue_redraw()
 		return
 	time = _clock()
 	session.advance(time - offset_ms / 1000.0, held)
@@ -98,38 +110,22 @@ func _process(_delta: float) -> void:
 	queue_redraw()
 
 func toggle_pause() -> void:
-	if not active:
-		return
-	paused = not paused
-	player.stream_paused = paused
-	for voice in voices:
-		voice.stream_paused = paused
-	queue_redraw()
-
-func _notification(what: int) -> void:
-	if what == NOTIFICATION_APPLICATION_FOCUS_OUT and active and not paused:
-		toggle_pause()
-		held = 0
+	shell.open_menu()
 
 func _input(event: InputEvent) -> void:
-	if not active or not event is InputEventKey or event.echo:
+	if not active or not event is InputEventKey or event.echo or shell.is_open or shell.is_pause_event(event):
 		return
-	var code: int = event.physical_keycode
-	var keys := [KEY_D, KEY_F, KEY_J, KEY_K] if instrument == "piano" else [KEY_S, KEY_D, KEY_F]
-	var lane: int = keys.find(code)
+	var lane: int = shell.lane(event, instrument)
 	if lane >= 0:
 		if event.pressed:
 			held |= 1 << lane
 		else:
 			held &= ~(1 << lane)
 	get_viewport().set_input_as_handled()
-	if event.pressed and code == KEY_P:
-		toggle_pause()
-		return
-	if event.pressed and code == KEY_ESCAPE:
+	if event.pressed and shell.matches(event, "back"):
 		resolve_now()
 		return
-	if paused:
+	if paused or preparation_left > 0:
 		return
 	var now := _clock() - offset_ms / 1000.0
 	session.advance(now, held)
@@ -138,8 +134,8 @@ func _input(event: InputEvent) -> void:
 	if instrument == "piano" and lane >= 0:
 		if session.press(now, lane, held):
 			_sound(lane)
-	elif instrument == "guitar" and code in [KEY_UP, KEY_DOWN]:
-		if session.press(now, 0, held, 1 if code == KEY_DOWN else -1):
+	elif instrument == "guitar" and (shell.matches(event, "strum_up") or shell.matches(event, "strum_down")):
+		if session.press(now, 0, held, 1 if shell.matches(event, "strum_down") else -1):
 			for fret in range(3):
 				if held & (1 << fret):
 					_sound(fret)
@@ -163,15 +159,17 @@ func _draw() -> void:
 	_text("120 BPM  /  " + ("STRUMLINE" if instrument == "guitar" else "CHORDFALL"), Vector2(455, 28), 14)
 	var hit := 177.0
 	if instrument == "piano":
-		_text("D / F / J / K", Vector2(16, 65), 18, COLORS[0])
+		_text(" / ".join(shell.lane_names("piano")), Vector2(16, 65), 16, COLORS[0])
 		_text("Tap chords together", Vector2(16, 91), 13)
 		_text("Hold long notes", Vector2(16, 112), 13)
 		for lane in range(4):
 			var x := 217.0 + lane * 80
 			draw_rect(Rect2(x, 43, 73, 145), Color("243346"))
 			draw_rect(Rect2(x, 185, 73, 24), COLORS[lane] if held & (1 << lane) else Color("d5dde8"))
-			_text(["D", "F", "J", "K"][lane], Vector2(x + 29, 203), 17, Color("131c28"))
+			_text(shell.key_name("piano_%d" % (lane + 1)), Vector2(x + 12, 203), 15, Color("131c28"))
 		for note in session.notes:
+			if preparation_left > 0:
+				break
 			if note.state == "done":
 				continue
 			var lane := 0
@@ -192,31 +190,32 @@ func _draw() -> void:
 		var names: PackedStringArray = []
 		for lane in range(3):
 			if chord_mask & (1 << lane):
-				names.append(["S", "D", "F"][lane])
+				names.append(shell.key_name("guitar_%d" % (lane + 1)))
 		_text("HOLD " + " + ".join(names), Vector2(16, 67), 22, Color("f5cf85"))
 		_text("One shape, whole phrase", Vector2(16, 91), 13)
-		_text("DOWN / UP arrows strum", Vector2(16, 113), 13)
-		_text("v  v ^  ^ v ^", Vector2(16, 145), 19, Color("f5cf85"))
+		_text(shell.key_name("strum_down") + " / " + shell.key_name("strum_up") + " strum", Vector2(16, 113), 13)
+		StrumVisuals.pattern(self, Vector2(27, 137), 27, 19)
 		for lane in range(3):
-			var color: Color = COLORS[lane] if held & (1 << lane) else Color("34465e")
-			draw_circle(Vector2(33 + lane * 55, 181), 19, color)
-			_text(["S", "D", "F"][lane], Vector2(27 + lane * 55, 187), 17)
+			StrumVisuals.fret(self, Rect2(10 + lane * 55, 158, 49, 51), (chord_mask & (1 << lane)) != 0, (held & (1 << lane)) != 0)
+			_text(shell.key_name("guitar_%d" % (lane + 1)), Vector2(25 + lane * 55, 189), 16)
 		for y in [88, 104, 120]:
 			draw_line(Vector2(232, y), Vector2(559, y), Color("806a4e"), 1)
 		draw_line(Vector2(265, 54), Vector2(265, 153), Color.WHITE, 2)
 		_text("HIT", Vector2(251, 176), 13)
 		for note in session.notes:
+			if preparation_left > 0:
+				break
 			if note.state == "done":
 				continue
 			var x: float = 265 + (float(note.time) - time) / 1.15 * 290
 			if x < 243 or x > 548:
 				continue
 			draw_circle(Vector2(x, 104), 18, Color("f5cf85"))
-			_text("v" if int(note.direction) == 1 else "^", Vector2(x - 7, 112), 25, Color("152031"))
+			StrumVisuals.arrow(self, Vector2(x, 104), int(note.direction), 25, Color("152031"))
 	_text("%d%%" % roundi(session.accuracy() * 100), Vector2(596, 77), 29, COLORS[0])
 	_text("ACCURACY", Vector2(596, 100), 12)
 	_text(feedback, Vector2(577, 136), 14, Color("f5cf85"))
-	_text("P pause  /  Esc resolve at 0%", Vector2(380, 235), 13, Color("aebdcc"))
+	_text("Esc pause / " + shell.key_name("back") + " forfeit", Vector2(380, 235), 13, Color("aebdcc"))
 	draw_rect(Rect2(16, 222, 690, 3), Color("34465e"))
 	draw_rect(Rect2(16, 222, 690 * clampf(time / END, 0, 1), 3), COLORS[0])
 	if paused:
