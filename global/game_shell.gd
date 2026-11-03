@@ -20,6 +20,9 @@ const LABELS := {
 var bindings: Dictionary = DEFAULTS.duplicate()
 var scene_ref: WeakRef
 var pending_save: Dictionary = {}
+var world_return_position := Vector2.ZERO
+var world_encounter_active := false
+var world_enemy_defeated := false
 var is_open := false
 var page := "main"
 var capture_action := ""
@@ -422,7 +425,7 @@ func read_slot(slot: int) -> Dictionary:
 	var data = JSON.parse_string(FileAccess.get_file_as_string(path))
 	if not data is Dictionary or data.get("version") != 1 or not data.get("payload") is Dictionary:
 		return {}
-	if data.get("scene") not in ["res://scenes/combat.tscn", "res://scenes/rhythm_lab.tscn"]:
+	if data.get("scene") not in ["res://scenes/world_map.tscn", "res://scenes/combat.tscn", "res://scenes/rhythm_lab.tscn"]:
 		return {}
 	return data
 
@@ -430,7 +433,7 @@ func load_slot(slot: int) -> String:
 	var data := read_slot(slot)
 	if data.is_empty():
 		return "This slot is empty or contains an unreadable save."
-	var script = load("res://combat/combat_scene.gd" if data.scene == "res://scenes/combat.tscn" else "res://rhythm/rhythm_lab.gd")
+	var script = load("res://world/world_map.gd" if data.scene == "res://scenes/world_map.tscn" else ("res://combat/combat_scene.gd" if data.scene == "res://scenes/combat.tscn" else "res://rhythm/rhythm_lab.gd"))
 	if not script.valid_save(data.payload):
 		return "This save contains invalid progress and cannot be loaded."
 	pending_save = data

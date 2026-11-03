@@ -1,5 +1,8 @@
 extends Node2D
 ## RPG Maker-style side-view sheet: 9 columns x 6 rows, 3 frames per motion.
+const MOTION_WALK := 0
+const MOTION_IDLE := 1
+
 var texture: Texture2D
 var cell := Vector2(48, 48)
 var motion := 1
@@ -30,6 +33,13 @@ func _ready() -> void:
 func play(value: int) -> void:
 	motion = value
 	clock = 0.0
+
+func face_direction(direction: Vector2) -> void:
+	if absf(direction.x) < 0.01:
+		return
+	facing_right = direction.x > 0
+	if is_instance_valid(sprite):
+		sprite.flip_h = facing_right
 
 func _process(delta: float) -> void:
 	clock += delta

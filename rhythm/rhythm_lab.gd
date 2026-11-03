@@ -56,7 +56,7 @@ func _ready() -> void:
 	session.judged.connect(_on_judged)
 	piano_button = _button("01  PIANO", Rect2(52, 114, 170, 44), func(): _select("piano"))
 	guitar_button = _button("02  GUITAR", Rect2(234, 114, 170, 44), func(): _select("guitar"))
-	mode_button = _button("Combat demo / " + shell.key_name("switch_mode"), Rect2(422, 114, 288, 44), func(): get_tree().change_scene_to_file("res://scenes/combat.tscn"))
+	mode_button = _button("World map / " + shell.key_name("switch_mode"), Rect2(422, 114, 288, 44), func(): get_tree().change_scene_to_file("res://scenes/world_map.tscn"))
 	start_button = _button("Start phrase", Rect2(730, 114, 160, 44), func(): start_performance(instrument))
 	pause_button = _button("Pause", Rect2(902, 114, 110, 44), _toggle_pause)
 	_button("Reset", Rect2(1024, 114, 124, 44), _reset)
@@ -181,7 +181,7 @@ func _input(event: InputEvent) -> void:
 	if not event is InputEventKey or event.echo or shell.is_open or shell.is_pause_event(event):
 		return
 	if event.pressed and shell.matches(event, "switch_mode"):
-		get_tree().change_scene_to_file("res://scenes/combat.tscn")
+		get_tree().change_scene_to_file("res://scenes/world_map.tscn")
 		return
 	var lane: int = shell.lane(event, instrument)
 	var lane_count := 4 if instrument == "piano" else 3
@@ -376,7 +376,7 @@ func _draw_guitar_chord(left: float, lane_width: float) -> void:
 			draw_arc(Vector2(left + lane_width * (lane + 0.5), HIT_Y + 33), 27, 0, TAU, 40, Color("f2c675"), 2)
 
 func refresh_bindings() -> void:
-	mode_button.text = "Combat demo / " + shell.key_name("switch_mode")
+	mode_button.text = "World map / " + shell.key_name("switch_mode")
 	queue_redraw()
 
 func sync_after_pause(duration_usec: int) -> void:

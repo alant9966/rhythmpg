@@ -1,14 +1,32 @@
 # RhythmPG — woodland combat prototype
 
-Press **F5** to play the complete encounter in `scenes/combat.tscn`. Rowan uses
+Press **F5** to open the world map in `scenes/world_map.tscn`. Begin in
+**Lumen's Rest**, the small starting city, then walk along the road into the
+**Whispering Wilds**. Rowan leads while Lyra and the cleric trail behind; walk
+up to the enemy to start the first encounter. Rowan uses
 the supplied warrior sprite and guitar; Lyra uses the mage sprite and piano.
 The Hollow Warden uses `Monster_4 SV Battler.png`, against `forest_clearing.png`.
 This is a fully 2D scene with a receding painted ground, staggered positions and
 sprite scales, contact shadows, foreground foliage, light shafts, and motes.
 The supplied battle sheets animate idle, attack, casting, damage, guard, victory,
 and defeat poses; packed effect atlases provide impacts, fire, shielding, and healing.
+The overworld uses the same sheets for walking/idle animation, keeps the party
+close together, and returns to the encounter entry position after a battle. A
+defeated overworld enemy is removed when the party returns.
+The supplied forest map sample is used for the wilderness backdrop; collision
+barriers keep the party on the road. The city-to-wilderness boundary is a load
+zone, and **M** opens a travel map for areas already visited.
 
 ## Playing the encounter
+
+### World map
+
+The map is data-driven in `world/world_map.gd`. Each entry in `ZONES` defines
+its label, route position, description, and whether it starts an encounter.
+Add a zone entry and a route in that file to expand the journey; encounter
+zones can point to their own scene as the map grows. The city and wilderness
+are connected by the first route, and the map is reachable from combat and
+Rhythm Lab.
 
 - **Esc** opens a global pause menu in combat and practice. Resume, save/load,
   edit keybindings, read the rhythm guide, or exit from this menu. **P** is a

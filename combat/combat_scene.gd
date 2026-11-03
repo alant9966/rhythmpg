@@ -42,6 +42,7 @@ var bgm: AudioStreamPlayer
 var impact: AudioStreamPlayer
 var live_tweens: Array[Tween] = []
 var save_checkpoint: Dictionary = {}
+var returning_to_world := false
 
 func _ready() -> void:
 	font = ThemeDB.fallback_font
@@ -123,6 +124,7 @@ func _show_commands() -> void:
 		button.mouse_entered.connect(func(): description = action.description)
 	description = "Choose an action. Accuracy grants up to 2x damage; support skills scale too."
 	_new_button("Rhythm Lab / " + shell.key_name("switch_mode"), Rect2(991, 23, 178, 34), _open_lab)
+	_new_button("World map", Rect2(620, 23, 174, 34), _open_map)
 	_new_button("Restart encounter", Rect2(806, 23, 174, 34), restart)
 	queue_redraw()
 
@@ -294,6 +296,12 @@ func _update_poses() -> void:
 	foe.play(17 if foe.dead else 1)
 
 func _show_outcome() -> void:
+	if shell.world_encounter_active and not returning_to_world:
+		if battle.outcome == "victory":
+			shell.world_enemy_defeated = true
+		returning_to_world = true
+		call_deferred("_return_to_world")
+		return
 	phase = battle.outcome
 	save_checkpoint = _snapshot()
 	rhythm.cancel()
@@ -306,6 +314,11 @@ func _show_outcome() -> void:
 	banner = "The path is clear." if phase == "victory" else "The melody fades. Try a different arrangement."
 	_new_button("Play again / " + shell.key_name("replay"), Rect2(389, 420, 210, 45), restart)
 	_new_button("Rhythm Lab / " + shell.key_name("switch_mode"), Rect2(613, 420, 210, 45), _open_lab)
+
+func _return_to_world() -> void:
+	await get_tree().create_timer(1.0, false).timeout
+	if is_inside_tree():
+		get_tree().change_scene_to_file("res://scenes/world_map.tscn")
 
 func restart() -> void:
 	generation += 1
@@ -334,6 +347,9 @@ func restart() -> void:
 
 func _open_lab() -> void:
 	get_tree().change_scene_to_file("res://scenes/rhythm_lab.tscn")
+
+func _open_map() -> void:
+	get_tree().change_scene_to_file("res://scenes/world_map.tscn")
 
 func _effect(key: String, point: Vector2) -> void:
 	var spec: Array = EFFECTS[key]
