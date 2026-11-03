@@ -68,11 +68,12 @@ func run() -> void:
 	scene.rhythm._input(key(KEY_DOWN))
 	check(scene.rhythm.session.stray_inputs == 0 and scene.rhythm.session.perfect == 0, "Preparation inputs are not judged")
 	var preparation: float = scene.rhythm.preparation_left
+	check(preparation >= 1.9, "Combat rhythm has a two-second preparation pause")
 	shell.open_menu()
 	await create_timer(0.15).timeout
 	check(is_equal_approx(scene.rhythm.preparation_left, preparation), "Global pause freezes preparation countdown")
 	shell.resume_game(false)
-	await create_timer(1.5).timeout
+	await create_timer(2.5).timeout
 	check(scene.rhythm.preparation_left == 0 and scene.rhythm.player.playing, "Countdown launches actual chart audio")
 	var song: float = scene.rhythm.time
 	shell.open_menu()

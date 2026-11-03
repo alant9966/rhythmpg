@@ -8,7 +8,7 @@ const StrumVisuals = preload("res://rhythm/strum_visuals.gd")
 const BEAT := 0.5
 const LEAD := 0.65
 const END := LEAD + 4 * BEAT
-const EMPTY_RUNWAY_SECONDS := 1.0
+const EMPTY_RUNWAY_SECONDS := 2.0
 const COLORS := [Color("88dbd3"), Color("abc7ff"), Color("d3b0ec"), Color("f5cf85")]
 var session = Session.new()
 var instrument := "guitar"
@@ -218,6 +218,12 @@ func _draw() -> void:
 	_text("Esc pause / " + shell.key_name("back") + " forfeit", Vector2(380, 235), 13, Color("aebdcc"))
 	draw_rect(Rect2(16, 222, 690, 3), Color("34465e"))
 	draw_rect(Rect2(16, 222, 690 * clampf(time / END, 0, 1), 3), COLORS[0])
+	if preparation_left > 0:
+		draw_rect(Rect2(205, 43, 355, 166), Color(0.03, 0.05, 0.09, 0.93))
+		_text("GET READY", Vector2(322, 92), 18, Color("f5cf85"))
+		_text("%d" % ceili(preparation_left), Vector2(366, 145), 42, COLORS[0])
+		draw_rect(Rect2(250, 166, 265, 8), Color("34465e"))
+		draw_rect(Rect2(250, 166, 265 * clampf(preparation_left / EMPTY_RUNWAY_SECONDS, 0, 1), 8), COLORS[0])
 	if paused:
 		draw_rect(Rect2(205, 43, 355, 166), Color(0.03, 0.05, 0.09, 0.96))
 		_text("PAUSED — P TO RESUME", Vector2(242, 128), 19)
