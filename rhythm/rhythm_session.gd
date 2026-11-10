@@ -60,7 +60,7 @@ func advance(time: float, held_mask: int) -> void:
 				judged.emit("HOLD BROKEN", false)
 
 func press(time: float, lane: int, held_mask: int, direction: int = 0) -> bool:
-	if finished:
+	if finished or instrument == "timpani":
 		return false
 	var candidate := -1
 	var closest := GOOD_WINDOW + 0.00001
@@ -82,6 +82,29 @@ func press(time: float, lane: int, held_mask: int, direction: int = 0) -> bool:
 		_stray("WRONG FRETS" if held_mask != int(selected.mask) else "WRONG STRUM")
 		return false
 	var precise := closest <= PERFECT_WINDOW
+	return _judge(selected, precise)
+
+func click(time: float, point: Vector2, area: Rect2, radius: float = 40.0) -> bool:
+	if finished or instrument != "timpani":
+		return false
+	# Always judge the earliest unresolved circle, so future targets cannot be farmed.
+	advance(time, 0)
+	for note in notes:
+		if note.state != "pending":
+			continue
+		var distance := absf(time - float(note.time))
+		var center: Vector2 = area.position + Vector2(note.position) * area.size
+		if distance > GOOD_WINDOW + 0.00001:
+			_stray("TOO EARLY")
+			return false
+		if point.distance_to(center) > radius:
+			_stray("WRONG CIRCLE")
+			return false
+		return _judge(note, distance <= PERFECT_WINDOW)
+	_stray()
+	return false
+
+func _judge(selected: Dictionary, precise: bool) -> bool:
 	selected.quality = 1.0 if precise else 0.7
 	earned += float(selected.quality)
 	selected.state = "holding" if selected.duration > 0.0 else "done"

@@ -14,12 +14,13 @@ const LABELS := {
 	"piano_1": "Piano · lane 1", "piano_2": "Piano · lane 2", "piano_3": "Piano · lane 3", "piano_4": "Piano · lane 4",
 	"guitar_1": "Guitar · fret 1", "guitar_2": "Guitar · fret 2", "guitar_3": "Guitar · fret 3",
 	"strum_down": "Guitar · down strum", "strum_up": "Guitar · up strum",
-	"command_1": "Command / ally 1", "command_2": "Command / ally 2", "command_3": "Command 3", "command_4": "Command 4", "command_5": "Command 5",
+	"command_1": "Command / ally 1", "command_2": "Command / ally 2", "command_3": "Command / ally 3", "command_4": "Command 4", "command_5": "Command 5",
 	"pause": "Pause shortcut (Esc always works)", "back": "Back / reset practice / forfeit phrase", "switch_mode": "Combat ↔ Rhythm Lab", "replay": "Replay finished battle",
 }
 var bindings: Dictionary = DEFAULTS.duplicate()
 var scene_ref: WeakRef
 var pending_save: Dictionary = {}
+var lab_return_save: Dictionary = {}
 var is_open := false
 var page := "main"
 var capture_action := ""
@@ -77,6 +78,17 @@ func register_scene(scene: Node) -> void:
 func current_scene() -> Node:
 	return scene_ref.get_ref() if scene_ref else null
 
+func enter_rhythm_lab() -> void:
+	var scene := current_scene()
+	lab_return_save = scene.make_save().duplicate(true) if scene and scene.scene_file_path == "res://scenes/combat.tscn" else {}
+	get_tree().change_scene_to_file("res://scenes/rhythm_lab.tscn")
+
+func return_from_rhythm_lab() -> void:
+	if not lab_return_save.is_empty():
+		pending_save = {"scene": "res://scenes/combat.tscn", "payload": lab_return_save.duplicate(true)}
+		lab_return_save = {}
+	get_tree().change_scene_to_file("res://scenes/combat.tscn")
+
 func matches(event: InputEvent, action: String) -> bool:
 	return event is InputEventKey and int(event.physical_keycode) == int(bindings.get(action, 0))
 
@@ -84,6 +96,8 @@ func key_name(action: String) -> String:
 	return OS.get_keycode_string(int(bindings.get(action, 0)))
 
 func lane(event: InputEvent, mode: String) -> int:
+	if mode == "timpani":
+		return -1
 	for i in range(4 if mode == "piano" else 3):
 		if matches(event, "%s_%d" % [mode, i + 1]):
 			return i
@@ -91,12 +105,16 @@ func lane(event: InputEvent, mode: String) -> int:
 
 func lane_names(mode: String) -> PackedStringArray:
 	var names: PackedStringArray = []
+	if mode == "timpani":
+		return names
 	for i in range(4 if mode == "piano" else 3):
 		names.append(key_name("%s_%d" % [mode, i + 1]))
 	return names
 
 func held_mask(mode: String) -> int:
 	var result := 0
+	if mode == "timpani":
+		return result
 	for i in range(4 if mode == "piano" else 3):
 		if Input.is_physical_key_pressed(int(bindings["%s_%d" % [mode, i + 1]])):
 			result |= 1 << i
@@ -225,7 +243,7 @@ func _button(text: String, action: Callable, parent: Node = null) -> Button:
 
 func _render() -> void:
 	for child in content.get_children():
-		if child is ScrollContainer:
+		if child is ScrollContainer and child.name != "GuideScroll":
 			controls_scroll = child.scroll_vertical
 		content.remove_child(child)
 		child.queue_free()
@@ -248,7 +266,7 @@ func _render() -> void:
 			_button("Exit game", func(): _show_page("quit"))
 		"saves":
 			_label("Save / Load", 30)
-			_label("Combat saves restore the latest command-selection point. An unfinished action is replayed from its command; practice saves reopen the selected instrument.", 16, Color("a5b4bd"))
+			_label("Combat saves retain recorded party choices and rhythm scores at the latest planning point. An unfinished performance is replayed; practice saves reopen the selected instrument.", 16, Color("a5b4bd"))
 			for slot in range(1, 4):
 				var data := read_slot(slot)
 				_label("SLOT %d  ·  %s" % [slot, str(data.get("summary", "Empty"))], 17, Color("eaca8a"))
@@ -281,13 +299,24 @@ func _render() -> void:
 			_button("Restore default keys", func(): reset_bindings(); notice = "Default keys restored."; _render())
 		"guide":
 			_label("Play the phrase. Shape the battle.", 29)
-			_label("PIANO · CHORDFALL", 20, Color("83d4c4"))
-			_label("Use %s from left to right. Press when falling notes reach the white line. Press chord keys together; keep long notes held until their tails finish." % " / ".join(lane_names("piano")), 17)
-			_label("GUITAR · STRUMLINE", 20, Color("eaca8a"))
-			_label("Hold the displayed combination of %s frets. Use %s to strum down and %s to strum up at the hit line. In practice, change shapes every 3 seconds when prompted. In combat, hold one shape for the whole short action. Fret presses are not separate rhythm notes." % [" / ".join(lane_names("guitar")), key_name("strum_down"), key_name("strum_up")], 17)
-			_label("THE PATTERN · DOWN, DOWN–UP, UP, DOWN–UP", 16, Color("eaca8a"))
-			_label("The rhythm view opens immediately with an empty play area for about one second, giving you time to ready your hands. Combat then plays one short 120 BPM bar; practice uses a four-beat audio count-in. Perfect timing is within 65 ms, Good within 140 ms. Accuracy strengthens damage, healing, shields, and status effects. Misses keep the baseline effect.", 16)
-			_label("Esc pauses without forfeiting. Use %s to back out of target selection, reset practice, or deliberately resolve a combat phrase at 0%%. Command keys: %s. Mode switch: %s." % [key_name("back"), " / ".join([key_name("command_1"), key_name("command_2"), key_name("command_3"), key_name("command_4"), key_name("command_5")]), key_name("switch_mode")], 15, Color("a5b4bd"))
+			var scroll := ScrollContainer.new()
+			scroll.name = "GuideScroll"
+			scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+			scroll.custom_minimum_size.y = 400
+			scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+			content.add_child(scroll)
+			var guide := VBoxContainer.new()
+			guide.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			guide.add_theme_constant_override("separation", 12)
+			scroll.add_child(guide)
+			_label("PIANO · CHORDFALL", 20, Color("83d4c4"), guide)
+			_label("Use %s from left to right. Press when falling notes reach the white line. Press chord keys together and hold long notes until their tails finish." % " / ".join(lane_names("piano")), 17, Color("e8eee9"), guide)
+			_label("GUITAR · STRUMLINE", 20, Color("eaca8a"), guide)
+			_label("Hold the displayed combination of %s frets. Use %s to strum down and %s to strum up at the hit line. In practice, change shapes when prompted. In combat, keep one shape for the phrase." % [" / ".join(lane_names("guitar")), key_name("strum_down"), key_name("strum_up")], 17, Color("e8eee9"), guide)
+			_label("TIMPANI · CIRCLESTRIKE", 20, Color("eaca8a"), guide)
+			_label("Aim with the mouse. Left-click numbered circles in order when the shrinking ring meets the target edge. Gold marks your next circle. Early or misplaced clicks count against accuracy.", 17, Color("e8eee9"), guide)
+			_label("Plan an action for each living ally. Scores are recorded first; the party acts from highest speed to lowest, then the enemy responds. Combat shuffles six maps per instrument. A 0% score fails, partial accuracy scales the action, and 100% unlocks its special bonus.", 16, Color("e8eee9"), guide)
+			_label("Esc pauses. %s backs out of targeting, resets practice, or resolves a combat phrase at 0%%. Choose allies with %s / %s / %s. Switch modes with %s." % [key_name("back"), key_name("command_1"), key_name("command_2"), key_name("command_3"), key_name("switch_mode")], 15, Color("a5b4bd"), guide)
 		"quit":
 			_label("Exit RhythmPG?", 32)
 			_label("Unsaved progress will be lost. You can create a save before leaving.", 18)
@@ -434,6 +463,7 @@ func load_slot(slot: int) -> String:
 	if not script.valid_save(data.payload):
 		return "This save contains invalid progress and cannot be loaded."
 	pending_save = data
+	lab_return_save = {}
 	if is_open:
 		resume_game(false)
 	var error := get_tree().change_scene_to_file(data.scene)

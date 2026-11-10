@@ -8,11 +8,15 @@ signal performance_finished(result: Dictionary)
 const Charts = preload("res://rhythm/practice_charts.gd")
 const Session = preload("res://rhythm/rhythm_session.gd")
 const StrumVisuals = preload("res://rhythm/strum_visuals.gd")
+const Circles = preload("res://rhythm/circle_visuals.gd")
+const CombatMaps = preload("res://combat/combat_beatmaps.gd")
+const Style = preload("res://rhythm/rhythm_theme.gd")
+const BACKGROUND = preload("res://assets/backgrounds/1280x720/forest_clearing.png")
 const PIANO_KEYS := [KEY_D, KEY_F, KEY_J, KEY_K]
 const GUITAR_KEYS := [KEY_S, KEY_D, KEY_F]
 const LANE_COLORS := [Color("79d8d0"), Color("97b9ff"), Color("c6a0ed"), Color("f2c675")]
-const INK := Color("e7edf6")
-const MUTED := Color("8b9cb3")
+const INK := Style.INK
+const MUTED := Style.MUTED
 const HIT_Y := 630.0
 const TOP_Y := 230.0
 const TRAVEL := 2.0
@@ -36,6 +40,8 @@ var start_button: Button
 var pause_button: Button
 var piano_button: Button
 var guitar_button: Button
+var timpani_button: Button
+var timpani_variation := -1
 var offset_control: SpinBox
 var mute_button: CheckButton
 var results: Dictionary = {}
@@ -54,9 +60,10 @@ func _ready() -> void:
 		add_child(voice)
 		voices.append(voice)
 	session.judged.connect(_on_judged)
-	piano_button = _button("01  PIANO", Rect2(52, 114, 170, 44), func(): _select("piano"))
-	guitar_button = _button("02  GUITAR", Rect2(234, 114, 170, 44), func(): _select("guitar"))
-	mode_button = _button("Combat demo / " + shell.key_name("switch_mode"), Rect2(422, 114, 288, 44), func(): get_tree().change_scene_to_file("res://scenes/combat.tscn"))
+	piano_button = _button("01  PIANO", Rect2(52, 114, 160, 44), func(): _select("piano"))
+	guitar_button = _button("02  GUITAR", Rect2(224, 114, 160, 44), func(): _select("guitar"))
+	timpani_button = _button("03  TIMPANI", Rect2(396, 114, 160, 44), func(): _select("timpani"))
+	mode_button = _button("Return to battle / " + shell.key_name("switch_mode"), Rect2(830, 24, 318, 44), _return_to_battle)
 	start_button = _button("Start phrase", Rect2(730, 114, 160, 44), func(): start_performance(instrument))
 	pause_button = _button("Pause", Rect2(902, 114, 110, 44), _toggle_pause)
 	_button("Reset", Rect2(1024, 114, 124, 44), _reset)
@@ -89,6 +96,7 @@ func _button(title: String, bounds: Rect2, callback: Callable) -> Button:
 	button.position = bounds.position
 	button.size = bounds.size
 	button.focus_mode = Control.FOCUS_NONE
+	Style.button(button)
 	button.pressed.connect(callback)
 	add_child(button)
 	return button
@@ -104,10 +112,21 @@ func _select(mode: String) -> void:
 	music.stream = load("res://audio/%s_practice.wav" % instrument)
 	piano_button.disabled = mode == "piano"
 	guitar_button.disabled = mode == "guitar"
+	timpani_button.disabled = mode == "timpani"
+	for tab in [piano_button, guitar_button, timpani_button]:
+		tab.add_theme_color_override("font_disabled_color", Style.GOLD)
+		tab.add_theme_stylebox_override("disabled", Style.panel(Color("273b40"), Style.GOLD))
 	queue_redraw()
 
 func start_performance(mode: String = "piano", chart: Array[Dictionary] = [], backing: AudioStream = null) -> void:
 	_select(mode)
+	if mode == "timpani" and chart.is_empty():
+		var count := CombatMaps.count(mode)
+		var next := randi_range(0, count - 1 if timpani_variation < 0 else count - 2)
+		if timpani_variation >= 0 and next >= timpani_variation:
+			next += 1
+		timpani_variation = next
+		session.setup(mode, Charts.make_chart(mode, next))
 	if not chart.is_empty():
 		session.setup(mode, chart)
 		performance_end_time = 0.0
@@ -178,10 +197,16 @@ func _process(delta: float) -> void:
 	queue_redraw()
 
 func _input(event: InputEvent) -> void:
+	if running and instrument == "timpani" and event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed and not shell.is_open:
+		var point: Vector2 = get_global_transform_with_canvas().affine_inverse() * event.position
+		if Circles.PRACTICE_AREA.has_point(point):
+			get_viewport().set_input_as_handled()
+			click_circle(point)
+		return
 	if not event is InputEventKey or event.echo or shell.is_open or shell.is_pause_event(event):
 		return
 	if event.pressed and shell.matches(event, "switch_mode"):
-		get_tree().change_scene_to_file("res://scenes/combat.tscn")
+		_return_to_battle()
 		return
 	var lane: int = shell.lane(event, instrument)
 	var lane_count := 4 if instrument == "piano" else 3
@@ -216,6 +241,17 @@ func _input(event: InputEvent) -> void:
 				if held_mask & (1 << fret):
 					_play_note(fret)
 
+func click_circle(point: Vector2) -> bool:
+	if not running or instrument != "timpani" or paused or preparation_left > 0 or shell.is_open or not Circles.PRACTICE_AREA.has_point(point):
+		return false
+	var now := _clock() - offset_ms / 1000.0
+	if now < 4.0 * Charts.BEAT - Session.GOOD_WINDOW:
+		return false
+	if session.click(now, point, Circles.PRACTICE_AREA, Circles.RADIUS):
+		_play_note((session.perfect + session.good - 1) % 4)
+		return true
+	return false
+
 func _play_note(lane: int) -> void:
 	for voice in voices:
 		if not voice.playing:
@@ -245,12 +281,21 @@ func _text(value: String, position: Vector2, size_px: int = 20, color: Color = I
 	draw_string(font, position, value, HORIZONTAL_ALIGNMENT_LEFT, -1, size_px, color)
 
 func _draw() -> void:
-	draw_rect(Rect2(Vector2.ZERO, size), Color("101724"))
-	_text("R H Y T H M   L A B", Vector2(52, 48), 15, Color("83e2c3"))
-	_text("Chordfall" if instrument == "piano" else "Strumline", Vector2(50, 91), 34)
-	_text("PIANO / FOUR KEYS" if instrument == "piano" else "GUITAR / FRET + STRUM", Vector2(360, 86), 16, MUTED)
-	_text("%d BPM  /  4-BEAT COUNT-IN" % (Charts.BPM if instrument == "piano" else Charts.GUITAR_BPM), Vector2(840, 78), 16, MUTED)
-	_text(" / ".join(shell.lane_names("piano")) + " · Tap at the line. Hold long notes; press chords together." if instrument == "piano" else "Hold " + " / ".join(shell.lane_names("guitar")) + " shapes for 3s. Strum " + shell.key_name("strum_down") + " / " + shell.key_name("strum_up") + " at the line.", Vector2(52, 193), 18)
+	draw_rect(Rect2(Vector2.ZERO, size), Color("101d28"))
+	draw_texture_rect(BACKGROUND, Rect2(0, -42, maxf(1200, size.x), maxf(800, size.y)), false)
+	draw_rect(Rect2(Vector2.ZERO, size), Color(0.025, 0.045, 0.06, 0.91))
+	draw_rect(Rect2(0, 0, size.x, 92), Color(0.025, 0.045, 0.06, 0.85))
+	_text("R H Y T H M P G   /   P R A C T I C E", Vector2(52, 33), 14, Style.GOLD)
+	_text("Rhythm Lab", Vector2(50, 73), 32)
+	draw_line(Vector2(52, 91), Vector2(1148, 91), Style.GOLD, 1)
+	_text("PRACTICE MODE", Vector2(574, 142), 13, MUTED)
+	_text("CIRCLESTRIKE / TIMPANI" if instrument == "timpani" else ("CHORDFALL / PIANO" if instrument == "piano" else "STRUMLINE / GUITAR"), Vector2(52, 184), 14, Style.GOLD)
+	_text("%d BPM  /  4-BEAT COUNT-IN" % (Charts.GUITAR_BPM if instrument == "guitar" else Charts.BPM), Vector2(840, 183), 16, MUTED)
+	if instrument == "timpani":
+		_draw_timpani_lab()
+		_draw_footer()
+		return
+	_text(" / ".join(shell.lane_names("piano")) + " · Tap at the line. Hold long notes; press chords together." if instrument == "piano" else "Hold " + " / ".join(shell.lane_names("guitar")) + " shapes for 3s. Strum " + shell.key_name("strum_down") + " / " + shell.key_name("strum_up") + " at the line.", Vector2(52, 214), 17)
 	var count := 4 if instrument == "piano" else 3
 	var left := 290.0
 	var width := 620.0
@@ -320,6 +365,26 @@ func _draw() -> void:
 		_text("= " + shell.key_name("strum_down"), Vector2(1000, 435), 14, MUTED)
 		StrumVisuals.arrow(self, Vector2(984, 455), -1, 18, Color("f2c675"))
 		_text("= " + shell.key_name("strum_up"), Vector2(1000, 460), 14, MUTED)
+	_draw_footer()
+
+func _draw_timpani_lab() -> void:
+	_text("Left-click each numbered circle when its shrinking ring meets the target edge.", Vector2(52, 214), 17)
+	draw_style_box(_panel(), Rect2(52, TOP_Y, 1096, 470))
+	draw_style_box(Style.panel(Color("101d28")), Rect2(276, 241, 676, 448))
+	_text("COMBO", Vector2(82, 280), 14, MUTED)
+	_text(str(session.combo), Vector2(82, 323), 36)
+	_text("ACCURACY", Vector2(82, 372), 14, MUTED)
+	_text("%.1f%%" % (session.accuracy() * 100), Vector2(82, 408), 26, Style.TEAL)
+	_text("GOLD = NEXT", Vector2(82, 477), 16, Style.GOLD)
+	_text("Aim, then click once.", Vector2(82, 507), 14, MUTED)
+	_text("%d / %d" % [session.perfect + session.good + session.missed, session.notes.size()], Vector2(977, 280), 22)
+	_text("CIRCLES", Vector2(977, 305), 14, MUTED)
+	if running and preparation_left <= 0:
+		Circles.draw(self, session.notes, song_time, Circles.PRACTICE_AREA, font)
+	elif results.is_empty() and not running:
+		_text("Click Start phrase to practice CircleStrike.", Vector2(426, 476), 19, MUTED)
+
+func _draw_footer() -> void:
 	var progress := clampf(song_time / maxf(performance_end_time, 0.01), 0, 1)
 	draw_rect(Rect2(52, 709, 1096, 3), Color("29374b"))
 	draw_rect(Rect2(52, 709, 1096 * progress, 3), Color("83e2c3"))
@@ -332,7 +397,7 @@ func _draw() -> void:
 	elif paused:
 		draw_style_box(_panel(), Rect2(370, 370, 460, 130))
 		_text("PAUSED", Vector2(530, 418), 28)
-		_text("Re-hold sustain keys, then press P to resume." if instrument == "piano" else "Hold the shown chord, then press P to resume.", Vector2(393, 465), 17, MUTED)
+		_text("Resume when you’re ready." if instrument == "timpani" else "Re-hold the keys you were playing.", Vector2(393, 465), 17, MUTED)
 	_text(feedback, Vector2(52, 746), 16, feedback_color)
 	_text("Esc pause menu    " + shell.key_name("back") + " reset", Vector2(52, 776), 15, MUTED)
 	_text("Timing offset", Vector2(832, 754), 15, MUTED)
@@ -376,8 +441,11 @@ func _draw_guitar_chord(left: float, lane_width: float) -> void:
 			draw_arc(Vector2(left + lane_width * (lane + 0.5), HIT_Y + 33), 27, 0, TAU, 40, Color("f2c675"), 2)
 
 func refresh_bindings() -> void:
-	mode_button.text = "Combat demo / " + shell.key_name("switch_mode")
+	mode_button.text = "Return to battle / " + shell.key_name("switch_mode")
 	queue_redraw()
+
+func _return_to_battle() -> void:
+	shell.return_from_rhythm_lab()
 
 func sync_after_pause(duration_usec: int) -> void:
 	held_mask = shell.held_mask(instrument)
@@ -388,17 +456,14 @@ func make_save() -> Dictionary:
 	return {"instrument": instrument, "summary": "Rhythm Lab · " + instrument.capitalize()}
 
 static func valid_save(data: Dictionary) -> bool:
-	return data.get("instrument") in ["piano", "guitar"]
+	return data.get("instrument") in ["piano", "guitar", "timpani"]
 
 func restore_save(data: Dictionary) -> void:
 	if valid_save(data):
 		_select(data.instrument)
 
 func _panel() -> StyleBoxFlat:
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color("172232")
-	style.set_corner_radius_all(12)
-	return style
+	return Style.panel(Color("152530"))
 
 func _note_style(color: Color) -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()

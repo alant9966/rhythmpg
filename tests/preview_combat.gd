@@ -21,7 +21,10 @@ func capture() -> void:
 	await create_timer(2.1).timeout
 	await shot("piano")
 	scene.rhythm.resolve_now()
-	await create_timer(0.23).timeout
+	scene.choose_action(0)
+	scene.rhythm.cancel()
+	scene._performance_finished({"accuracy": 1.0})
+	await create_timer(1.75).timeout
 	await shot("impact")
 	await create_timer(2.7).timeout
 	scene.battle.enemy.hp = 0

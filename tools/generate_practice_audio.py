@@ -31,7 +31,18 @@ def write(name, samples):
         output.writeframes(b"".join(struct.pack("<h", int(max(-1, min(1, s)) * 32767)) for s in samples))
 
 
-for instrument in ("piano", "guitar"):
+def drum(samples, start, frequency, duration, volume):
+    offset = int(start * RATE)
+    for i in range(min(int(duration * RATE), len(samples) - offset)):
+        t = i / RATE
+        phase = math.tau * frequency * (t + 0.003 * (1 - math.exp(-28 * t)))
+        body = math.sin(phase) + 0.30 * math.sin(phase * 1.51) * math.exp(-6 * t)
+        head = 0.24 * math.sin(phase * 2.14) * math.exp(-22 * t)
+        envelope = min(t / 0.004, 1) * min((duration - t) / 0.04, 1) * math.exp(-4 * t)
+        samples[offset + i] += (body + head) * envelope * volume
+
+
+for instrument in ("piano", "guitar", "timpani"):
     beat_seconds = 0.75 if instrument == "guitar" else BEAT
     beat_count = 21 if instrument == "guitar" else 29
     track = [0.0] * int(beat_count * beat_seconds * RATE)
@@ -41,29 +52,39 @@ for instrument in ("piano", "guitar"):
         if beat >= 4:
             roots = [130.8128, 110, 87.3071, 97.9989]
             root = roots[((beat - 4) // 4) % 4]
-            tone(track, beat * beat_seconds, root, 0.40, 0.11, instrument == "guitar")
-            if beat % 4 == 0:
+            if instrument == "timpani":
+                drum(track, beat * beat_seconds, root * 0.5, 0.5, 0.14)
+            else:
+                tone(track, beat * beat_seconds, root, 0.40, 0.11, instrument == "guitar")
+            if beat % 4 == 0 and instrument != "timpani":
                 for ratio in (2, 2.5, 3):
                     tone(track, beat * beat_seconds, root * ratio, 1.5, 0.045, instrument == "guitar")
     write(f"{instrument}_practice.wav", track)
     for lane, freq in enumerate([261.6256, 329.6276, 391.9954, 523.2511]):
         sound = [0.0] * RATE
-        tone(sound, 0, freq, 1.0, 0.24, instrument == "guitar")
+        if instrument == "timpani":
+            drum(sound, 0, (65.41, 82.41, 98, 110)[lane], 0.85, 0.52)
+        else:
+            tone(sound, 0, freq, 1.0, 0.24, instrument == "guitar")
         write(f"{instrument}_{lane}.wav", sound)
 
-print("Generated piano/guitar backing tracks and note samples in", OUT)
+print("Generated practice backing tracks and note samples in", OUT)
 
 # Short battle performances: a 0.65-second pickup and one 120 BPM bar.
-for instrument in ("piano", "guitar"):
+for instrument in ("piano", "guitar", "timpani"):
     track = [0.0] * int(3.15 * RATE)
     tone(track, 0.04, 880, 0.06, 0.16)
     for beat in range(5):
         start = 0.65 + beat * 0.5
         tone(track, start, 1000 if beat == 0 else 700, 0.04, 0.13)
         if beat < 4:
-            tone(track, start, 130.8128, 0.4, 0.09, instrument == "guitar")
-    for freq in (261.6256, 329.6276, 391.9954):
-        tone(track, 0.65, freq, 1.7, 0.035, instrument == "guitar")
+            if instrument == "timpani":
+                drum(track, start, 65.41 if beat == 0 else 82.41, 0.42, 0.14)
+            else:
+                tone(track, start, 130.8128, 0.4, 0.09, instrument == "guitar")
+    if instrument != "timpani":
+        for freq in (261.6256, 329.6276, 391.9954):
+            tone(track, 0.65, freq, 1.7, 0.035, instrument == "guitar")
     write(f"combat_{instrument}.wav", track)
 
 # A quiet original sixteen-second battle loop, with no third-party music.

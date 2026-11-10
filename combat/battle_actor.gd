@@ -9,6 +9,7 @@ var dead := false
 var facing_right := false
 var sprite: Sprite2D
 var ground := Vector2.ZERO
+var has_timpani := false
 
 func setup(path: String, feet: Vector2, depth_scale: float, enemy: bool = false) -> void:
 	texture = load(path)
@@ -45,3 +46,13 @@ func _draw() -> void:
 	draw_set_transform(Vector2(0, -2), 0, Vector2(1, 0.28))
 	draw_circle(Vector2.ZERO, cell.x * 0.26, Color(0.02, 0.03, 0.04, 0.48))
 	draw_set_transform(Vector2.ZERO)
+	if has_timpani and not dead:
+		for x in [-19, 13]:
+			draw_line(Vector2(x - 5, -5), Vector2(x - 6, 2), Color("382c2d"), 2)
+			draw_line(Vector2(x + 5, -5), Vector2(x + 6, 2), Color("382c2d"), 2)
+			draw_colored_polygon(PackedVector2Array([Vector2(x - 9, -12), Vector2(x + 9, -12), Vector2(x + 6, -5), Vector2(x - 6, -5)]), Color("a46746"))
+			draw_line(Vector2(x - 5, -10), Vector2(x - 3, -6), Color("d7a36a"), 1)
+			draw_set_transform(Vector2(x, -12), 0, Vector2(1, 0.35))
+			draw_circle(Vector2.ZERO, 9, Color("4b3935"))
+			draw_circle(Vector2.ZERO, 7.5, Color("e2c69a"))
+			draw_set_transform(Vector2.ZERO)

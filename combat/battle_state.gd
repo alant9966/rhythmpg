@@ -8,6 +8,11 @@ var turn_cursor := 0
 var tonics := 2
 var outcome := ""
 var last_event := ""
+var queued_actions: Array[Dictionary] = []
+var resolution_queue: Array[Dictionary] = []
+var resolution_index := 0
+var resolution_active := false
+var spent_actors: Array[int] = [] # Migration of saves made after an old-style turn.
 
 func _init() -> void:
 	reset()
@@ -15,41 +20,57 @@ func _init() -> void:
 func reset() -> void:
 	party = [
 		{"name": "Rowan", "job": "Warrior", "instrument": "guitar", "hp": 180, "max_hp": 180,
-			"mp": 24, "max_mp": 24, "attack": 24, "magic": 8, "defense": 14, "speed": 15, "shield": 0, "guard": false},
+			"mp": 24, "max_mp": 24, "attack": 24, "magic": 8, "defense": 14, "speed": 15, "shield": 0, "guard": false, "guard_strength": 0.0},
 		{"name": "Lyra", "job": "Mage", "instrument": "piano", "hp": 124, "max_hp": 124,
-			"mp": 32, "max_mp": 32, "attack": 10, "magic": 30, "defense": 8, "speed": 12, "shield": 0, "guard": false},
+			"mp": 32, "max_mp": 32, "attack": 10, "magic": 30, "defense": 8, "speed": 12, "shield": 0, "guard": false, "guard_strength": 0.0},
+		{"name": "Maro", "job": "Percussionist", "instrument": "timpani", "hp": 148, "max_hp": 148,
+			"mp": 28, "max_mp": 28, "attack": 28, "magic": 14, "defense": 12, "speed": 10, "shield": 0, "guard": false, "guard_strength": 0.0},
 	]
 	enemy = {"name": "The Hollow Warden", "hp": 650, "max_hp": 650, "attack": 39,
 		"defense": 12, "resist": 10, "speed": 10, "burn": 0, "burn_turns": 0,
-		"exposed": 0.0, "exposed_turns": 0}
+		"exposed": 0.0, "exposed_turns": 0, "stagger_turns": 0}
 	round_number = 1
 	turn_cursor = 0
 	tonics = 2
 	outcome = ""
 	last_event = "An ancient sentinel bars the woodland passage."
+	queued_actions.clear()
+	resolution_queue.clear()
+	resolution_index = 0
+	resolution_active = false
+	spent_actors.clear()
 
 func actions(actor: int) -> Array[Dictionary]:
 	var result: Array[Dictionary]
 	if actor == 0:
 		result = [
 			{"id": "attack", "name": "Downstroke", "cost": 0, "target": "enemy", "power": 24,
-				"description": "A sharp guitar-led strike. 36–72 damage."},
+				"perfect": "CRITICAL x1.5", "description": "Up to 72 damage, scaled by accuracy. Perfect: critical strike for 108 damage. 0% misses."},
 			{"id": "rend", "name": "Rending Riff", "cost": 6, "target": "enemy", "power": 44,
-				"description": "56–112 damage. Expose the foe: +10–25% damage for 2 enemy turns."},
+				"perfect": "EXPOSE +25% / 2 TURNS", "description": "Up to 112 damage, scaled by accuracy. Perfect: expose the foe (+25% damage, 2 enemy turns)."},
 			{"id": "shield", "name": "Iron Chorus", "cost": 4, "target": "party", "power": 14,
-				"description": "Grant both allies a 14–34 HP shield. Replaces weaker shields."},
+				"perfect": "SHIELD x1.5", "description": "Up to 34 shield HP per ally, scaled by accuracy. Perfect: 51 shield HP. 0% fails."},
+		]
+	elif actor == 1:
+		result = [
+			{"id": "attack", "name": "Spark", "cost": 0, "target": "enemy", "power": 22,
+				"perfect": "ARCANE CRITICAL x1.5", "description": "Up to 84 magic damage, scaled by accuracy. Perfect: critical bolt for 126 damage. 0% misses."},
+			{"id": "flame", "name": "Flame Sonata", "cost": 8, "target": "enemy", "power": 45,
+				"perfect": "BURN 18 / 2 TURNS", "description": "Up to 130 damage, scaled by accuracy. Perfect: burn for 18 HP on each of 2 enemy turns."},
+			{"id": "heal", "name": "Mending Chord", "cost": 7, "target": "ally", "power": 35,
+				"perfect": "RESTORE 6 MP", "description": "Restore up to 80 HP, scaled by accuracy. Perfect: also restore 6 MP. Living allies only."},
 		]
 	else:
 		result = [
-			{"id": "attack", "name": "Spark", "cost": 0, "target": "enemy", "power": 22,
-				"description": "A bright piano-led bolt. 42–84 magic damage."},
-			{"id": "flame", "name": "Flame Sonata", "cost": 8, "target": "enemy", "power": 45,
-				"description": "65–130 damage. Burn for 6–18 HP over 2 enemy turns."},
-			{"id": "heal", "name": "Mending Chord", "cost": 7, "target": "ally", "power": 35,
-				"description": "Restore 35–80 HP to a living ally. Choose a target."},
+			{"id": "attack", "name": "Drumstrike", "cost": 0, "target": "enemy", "power": 24,
+				"perfect": "THUNDER CRITICAL x1.5", "description": "Up to 80 damage, scaled by accuracy. Perfect: a 120-damage thunder critical."},
+			{"id": "thunder", "name": "Thunder Roll", "cost": 8, "target": "enemy", "power": 42,
+				"perfect": "STAGGER / SKIP ENEMY RESPONSE", "description": "Up to 116 damage, scaled by accuracy. Perfect: stagger the enemy, skipping its next response."},
+			{"id": "rally", "name": "Rallying Beat", "cost": 6, "target": "party", "power": 4,
+				"perfect": "PARTY HEAL 20 HP", "description": "Restore up to 4 MP to every living ally, scaled by accuracy. Perfect: also restore 20 HP each."},
 		]
 	result.append({"id": "guard", "name": "Guard / Recover", "cost": 0, "target": "self", "power": 0,
-		"description": "Halve the next hit and recover 4 MP. No performance needed."})
+		"perfect": "FULL BLOCK / +4 BONUS MP", "description": "Play your instrument: up to 75% next-hit reduction and 4 MP, scaled by accuracy. Perfect: full block and 8 MP."})
 	result.append({"id": "tonic", "name": "Field Tonic", "cost": 0, "target": "ally", "power": 65,
 		"description": "Restore 65 HP, or revive a fallen ally with 55 HP. Two per battle."})
 	return result
@@ -57,12 +78,105 @@ func actions(actor: int) -> Array[Dictionary]:
 func can_use(actor: int, action: Dictionary) -> bool:
 	return outcome.is_empty() and turn_cursor == actor and party[actor].hp > 0 and party[actor].mp >= action.cost and (action.id != "tonic" or tonics > 0)
 
+func action_for(actor: int, id: String) -> Dictionary:
+	for action in actions(actor):
+		if action.id == id:
+			return action
+	return {}
+
+func queued_for(actor: int) -> Dictionary:
+	for entry in queued_actions:
+		if entry.actor == actor:
+			return entry
+	return {}
+
+func available_tonics() -> int:
+	var reserved := 0
+	for entry in queued_actions:
+		if entry.action_id == "tonic":
+			reserved += 1
+	return maxi(0, tonics - reserved)
+
+func can_plan(actor: int, action: Dictionary) -> bool:
+	return not resolution_active and actor not in spent_actors and queued_for(actor).is_empty() and can_use(actor, action) and (action.id != "tonic" or available_tonics() > 0)
+
+func next_planner() -> int:
+	for actor in range(party.size()):
+		if party[actor].hp > 0 and actor not in spent_actors and queued_for(actor).is_empty():
+			return actor
+	return -1
+
+func queue_action(actor: int, action: Dictionary, target: int, accuracy: float) -> bool:
+	if not can_plan(actor, action) or action_for(actor, action.id).is_empty():
+		return false
+	if action.target == "ally" and (target < 0 or target >= party.size() or (action.id == "heal" and party[target].hp <= 0)):
+		return false
+	queued_actions.append({"actor": actor, "action_id": action.id, "target": target,
+		"accuracy": clampf(accuracy, 0, 1)})
+	var next := next_planner()
+	if next >= 0:
+		turn_cursor = next
+	return true
+
+func speed_order() -> Array[int]:
+	var order: Array[int] = []
+	for actor in range(party.size()):
+		if party[actor].hp > 0 and actor not in spent_actors:
+			order.append(actor)
+	order.sort_custom(func(a: int, b: int):
+		return a < b if party[a].speed == party[b].speed else party[a].speed > party[b].speed)
+	return order
+
+func begin_resolution() -> bool:
+	if resolution_active or not outcome.is_empty() or next_planner() >= 0 or queued_actions.is_empty():
+		return false
+	resolution_queue = queued_actions.duplicate(true)
+	resolution_queue.sort_custom(func(a: Dictionary, b: Dictionary):
+		return a.actor < b.actor if party[a.actor].speed == party[b.actor].speed else party[a.actor].speed > party[b.actor].speed)
+	resolution_index = 0
+	resolution_active = true
+	return true
+
+func take_next_action() -> Dictionary:
+	_check_outcome()
+	if not resolution_active or not outcome.is_empty():
+		return {}
+	while resolution_index < resolution_queue.size():
+		var entry: Dictionary = resolution_queue[resolution_index]
+		resolution_index += 1
+		if party[entry.actor].hp <= 0:
+			continue
+		turn_cursor = int(entry.actor)
+		return entry.duplicate(true)
+	turn_cursor = party.size()
+	return {}
+
+func finish_round() -> void:
+	_check_outcome()
+	if not outcome.is_empty():
+		return
+	queued_actions.clear()
+	resolution_queue.clear()
+	resolution_index = 0
+	resolution_active = false
+	spent_actors.clear()
+	round_number += 1
+	for hero in party:
+		if hero.hp > 0:
+			hero.mp = mini(hero.max_mp, hero.mp + 2)
+	turn_cursor = next_planner()
+
 func intent() -> Dictionary:
+	if enemy.stagger_turns > 0:
+		return {"name": "Staggered", "target": -1, "description": "The Warden will skip its response."}
 	if round_number % 3 == 0:
-		return {"name": "Dissonant Wave", "target": -1, "description": "A wave will strike both allies."}
-	var target := 0 if round_number % 2 == 1 else 1
-	if party[target].hp <= 0:
-		target = 1 - target
+		return {"name": "Dissonant Wave", "target": -1, "description": "A wave will strike the entire party."}
+	var cleave := round_number - 1 - floori((round_number - 1) / 3.0)
+	var target := cleave % party.size()
+	for offset in range(party.size()):
+		if party[(target + offset) % party.size()].hp > 0:
+			target = (target + offset) % party.size()
+			break
 	return {"name": "Heavy Cleave", "target": target, "description": "A heavy strike aimed at " + str(party[target].name) + "."}
 
 func apply_player(actor: int, action: Dictionary, target: int, accuracy: float) -> Dictionary:
@@ -72,14 +186,24 @@ func apply_player(actor: int, action: Dictionary, target: int, accuracy: float) 
 		return {}
 	var a := clampf(accuracy, 0.0, 1.0)
 	party[actor].mp -= int(action.cost)
-	var event := {"id": action.id, "actor": actor, "target": target, "accuracy": a, "amount": 0, "hits": []}
+	var perfect: bool = a == 1.0 and action.id != "tonic"
+	var event := {"id": action.id, "actor": actor, "target": target, "accuracy": a, "amount": 0, "hits": [],
+		"missed": a == 0.0 and action.id != "tonic", "perfect": perfect, "bonus": "", "mp": 0}
+	if event.missed:
+		last_event = "%s MISSED — 0%% accuracy. No effect." % action.name
+		return event
+	if perfect:
+		event.bonus = action.get("perfect", "")
 	match action.id:
 		"guard":
 			party[actor].guard = true
-			party[actor].mp = mini(party[actor].max_mp, party[actor].mp + 4)
-			last_event = str(party[actor].name) + " braces and recovers 4 MP."
+			party[actor].guard_strength = 1.0 if perfect else 0.75 * a
+			event.amount = roundi(party[actor].guard_strength * 100)
+			event.mp = 8 if perfect else maxi(1, roundi(4 * a))
+			party[actor].mp = mini(party[actor].max_mp, party[actor].mp + event.mp)
+			last_event = "%s guards the next hit by %d%% and recovers %d MP." % [party[actor].name, event.amount, event.mp]
 		"tonic", "heal":
-			var amount: int = 65 if action.id == "tonic" else roundi(35 + 45 * a)
+			var amount: int = 65 if action.id == "tonic" else maxi(1, roundi(80 * a))
 			if action.id == "tonic":
 				tonics -= 1
 				if party[target].hp == 0:
@@ -87,32 +211,49 @@ func apply_player(actor: int, action: Dictionary, target: int, accuracy: float) 
 			var before: int = party[target].hp
 			party[target].hp = mini(party[target].max_hp, party[target].hp + amount)
 			event.amount = party[target].hp - before
+			if perfect:
+				var mp_before: int = party[target].mp
+				party[target].mp = mini(party[target].max_mp, party[target].mp + 6)
+				event.mp = party[target].mp - mp_before
 			last_event = "%s restores %d HP to %s." % [party[actor].name, event.amount, party[target].name]
 		"shield":
-			event.amount = roundi(14 + 20 * a)
+			event.amount = 51 if perfect else maxi(1, roundi(34 * a))
 			for hero in party:
 				if hero.hp > 0:
 					hero.shield = maxi(hero.shield, event.amount)
 			last_event = "Iron Chorus grants each living ally a %d HP shield." % event.amount
+		"rally":
+			event.amount = maxi(1, roundi(4 * a))
+			for hero in party:
+				if hero.hp > 0:
+					hero.mp = mini(hero.max_mp, hero.mp + event.amount)
+					if perfect:
+						hero.hp = mini(hero.max_hp, hero.hp + 20)
+			last_event = "Rallying Beat restores up to %d MP to every living ally." % event.amount
 		_:
-			var stat: int = party[actor].attack if actor == 0 else party[actor].magic
-			var defense: int = enemy.defense if actor == 0 else enemy.resist
-			event.amount = roundi(maxi(1, action.power + stat - defense) * (1.0 + a) * (1.0 + float(enemy.exposed)))
+			var stat: int = party[actor].magic if actor == 1 else party[actor].attack
+			var defense: int = enemy.resist if actor == 1 else enemy.defense
+			var critical := 1.5 if perfect and action.id == "attack" else 1.0
+			event.amount = maxi(1, roundi(maxi(1, action.power + stat - defense) * 2.0 * a * critical * (1.0 + float(enemy.exposed))))
 			enemy.hp = maxi(0, enemy.hp - event.amount)
-			if action.id == "rend":
-				enemy.exposed = 0.10 + 0.15 * a
+			if perfect and action.id == "rend":
+				enemy.exposed = 0.25
 				enemy.exposed_turns = 2
-			if action.id == "flame":
-				enemy.burn = roundi(6 + 12 * a)
+			if perfect and action.id == "flame":
+				enemy.burn = 18
 				enemy.burn_turns = 2
-			last_event = "%s deals %d damage — %d%% resonance." % [action.name, event.amount, roundi(a * 100)]
+			if perfect and action.id == "thunder":
+				enemy.stagger_turns = 1
+			last_event = "%s deals %d damage — %.1f%% accuracy." % [action.name, event.amount, a * 100]
+	if perfect:
+		last_event += " PERFECT: " + str(event.bonus) + "."
 	_check_outcome()
 	return event
 
 func apply_enemy() -> Dictionary:
-	if turn_cursor != 2 or not outcome.is_empty():
+	if turn_cursor != party.size() or not outcome.is_empty():
 		return {}
-	var event := {"id": "enemy", "hits": [], "burn": 0, "name": ""}
+	var event := {"id": "enemy", "hits": [], "burn": 0, "name": "", "staggered": false}
 	if enemy.burn_turns > 0:
 		event.burn = enemy.burn
 		enemy.hp = maxi(0, enemy.hp - enemy.burn)
@@ -121,44 +262,42 @@ func apply_enemy() -> Dictionary:
 		if not outcome.is_empty():
 			last_event = "The Warden falls to the lingering flame."
 			return event
+	if enemy.stagger_turns > 0:
+		enemy.stagger_turns -= 1
+		event.staggered = true
+		event.name = "STAGGERED"
+		last_event = "Thunder Roll staggered the Warden — its response is skipped."
+		_tick_expose()
+		return event
 	var next: Dictionary = intent()
 	event.name = next.name
-	for target in range(2):
+	for target in range(party.size()):
 		if party[target].hp <= 0 or (next.target != -1 and next.target != target):
 			continue
 		var hero: Dictionary = party[target]
 		var damage: int = maxi(1, (34 if next.target == -1 else enemy.attack) - hero.defense)
 		if hero.guard:
-			damage = ceili(damage * 0.5)
+			damage = ceili(damage * (1.0 - float(hero.guard_strength)))
 			hero.guard = false
+			hero.guard_strength = 0.0
 		var absorbed: int = mini(hero.shield, damage)
 		hero.shield -= absorbed
 		damage -= absorbed
 		hero.hp = maxi(0, hero.hp - damage)
 		event.hits.append({"target": target, "amount": damage, "absorbed": absorbed})
-	if enemy.exposed_turns > 0:
-		enemy.exposed_turns -= 1
-		if enemy.exposed_turns == 0:
-			enemy.exposed = 0.0
+	_tick_expose()
 	last_event = str(next.name) + " crashes through the clearing."
 	_check_outcome()
 	return event
 
-func advance_turn() -> void:
-	_check_outcome()
-	if not outcome.is_empty():
-		return
-	for step in range(3):
-		turn_cursor = (turn_cursor + 1) % 3
-		if turn_cursor == 0:
-			round_number += 1
-		if turn_cursor == 2 or party[turn_cursor].hp > 0:
-			if turn_cursor < 2:
-				party[turn_cursor].mp = mini(party[turn_cursor].max_mp, party[turn_cursor].mp + 2)
-			return
+func _tick_expose() -> void:
+	if enemy.exposed_turns > 0:
+		enemy.exposed_turns -= 1
+		if enemy.exposed_turns == 0:
+			enemy.exposed = 0.0
 
 func _check_outcome() -> void:
 	if enemy.hp <= 0:
 		outcome = "victory"
-	elif party[0].hp <= 0 and party[1].hp <= 0:
+	elif party.all(func(hero: Dictionary): return hero.hp <= 0):
 		outcome = "defeat"

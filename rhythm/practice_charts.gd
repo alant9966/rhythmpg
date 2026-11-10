@@ -8,6 +8,7 @@ const GUITAR_CHORD_SECONDS := 3.0
 # A relaxed four-beat bar: down, down-up, (rest)-up, down-up.
 const STRUM_BEATS := [0.0, 1.0, 1.5, 2.5, 3.0, 3.5]
 const STRUM_DIRECTIONS := [1, 1, -1, -1, 1, -1]
+const CombatMaps = preload("res://combat/combat_beatmaps.gd")
 
 static func beat_seconds(instrument: String) -> float:
 	return 60.0 / GUITAR_BPM if instrument == "guitar" else BEAT
@@ -21,9 +22,9 @@ static func guitar_chords() -> Array[Dictionary]:
 	return chords
 
 static func phrase_end(instrument: String) -> float:
-	return 15.0 if instrument == "guitar" else 26.0 * BEAT
+	return 20.0 * BEAT if instrument == "timpani" else (15.0 if instrument == "guitar" else 26.0 * BEAT)
 
-static func make_chart(instrument: String) -> Array[Dictionary]:
+static func make_chart(instrument: String, variation: int = 0) -> Array[Dictionary]:
 	var notes: Array[Dictionary] = []
 	if instrument == "piano":
 		# beat, lane, hold length. Simultaneous entries form a chord.
@@ -40,6 +41,12 @@ static func make_chart(instrument: String) -> Array[Dictionary]:
 		for item in phrase:
 			notes.append({"time": float(item[0]) * BEAT, "mask": 1 << int(item[1]),
 				"duration": float(item[2]) * BEAT, "direction": 0})
+	elif instrument == "timpani":
+		for bar in range(4):
+			for note in CombatMaps.chart("timpani", 1, variation + bar):
+				var beat: float = (note.time - CombatMaps.LEAD) / CombatMaps.BEAT
+				note.time = (4 + bar * 4 + beat) * BEAT
+				notes.append(note)
 	else:
 		# Keep one chord for a whole three-second bar. Only strums are timed.
 		for chord in guitar_chords():

@@ -16,42 +16,43 @@ func _initialize() -> void:
 
 func run() -> void:
 	var battle = Rules.new()
+	battle.party.resize(2)
 	var event: Dictionary = battle.apply_player(0, battle.actions(0)[0], -1, 0)
-	check(event.amount == 36 and battle.enemy.hp == 614, "Zero accuracy still deals baseline damage")
-	battle.reset()
+	check(event.amount == 0 and battle.enemy.hp == 650 and event.missed, "Zero accuracy misses without damage")
+	reset_duo(battle)
 	event = battle.apply_player(0, battle.actions(0)[0], -1, 1)
-	check(event.amount == 72, "Perfect accuracy doubles damage")
-	battle.reset()
+	check(event.amount == 108 and event.perfect, "Perfect attack adds a critical multiplier")
+	reset_duo(battle)
 	check(battle.apply_player(1, battle.actions(1)[0], -1, 1).is_empty(), "Wrong actor cannot act")
 	battle.party[0].mp = 0
 	check(not battle.can_use(0, battle.actions(0)[1]), "Unaffordable skill disabled")
 	check(battle.apply_player(0, battle.actions(0)[1], -1, 1).is_empty(), "Unaffordable skill cannot resolve")
-	battle.reset()
+	reset_duo(battle)
 	battle.apply_player(0, battle.actions(0)[1], -1, 1)
 	check(battle.party[0].mp == 18 and battle.enemy.exposed_turns == 2, "Riff spends MP and exposes enemy")
-	battle.advance_turn()
+	battle.turn_cursor = 1
 	event = battle.apply_player(1, battle.actions(1)[1], -1, 1)
 	check(event.amount == 163, "Expose amplifies the mage's damage")
 	check(battle.enemy.burn == 18 and battle.enemy.burn_turns == 2, "Accuracy scales burn")
-	battle.advance_turn()
+	battle.turn_cursor = 2
 	event = battle.apply_enemy()
 	check(event.burn == 18 and battle.enemy.burn_turns == 1 and battle.enemy.exposed_turns == 1, "Status durations tick on enemy turn")
 	check(event.hits.size() == 1 and event.hits[0].target == 0, "Round one cleave hits telegraphed warrior")
-	battle.advance_turn()
+	battle.finish_round()
 	check(battle.round_number == 2 and battle.turn_cursor == 0, "Round order wraps to warrior")
 	check(battle.intent().target == 1, "Round two cleave targets mage")
-	battle.reset()
+	reset_duo(battle)
 	battle.apply_player(0, battle.actions(0)[2], -1, 1)
-	check(battle.party[0].shield == 34 and battle.party[1].shield == 34, "Perfect shield protects both allies")
+	check(battle.party[0].shield == 51 and battle.party[1].shield == 51, "Perfect shield adds 50% potency")
 	battle.turn_cursor = 2
 	event = battle.apply_enemy()
-	check(event.hits[0].amount == 0 and battle.party[0].shield == 9, "Shield absorbs enemy hit before HP")
-	battle.reset()
-	battle.apply_player(0, battle.actions(0)[3], -1, 0)
+	check(event.hits[0].amount == 0 and battle.party[0].shield == 26, "Shield absorbs enemy hit before HP")
+	reset_duo(battle)
+	battle.apply_player(0, battle.actions(0)[3], -1, 0.5)
 	battle.turn_cursor = 2
 	event = battle.apply_enemy()
-	check(event.hits[0].amount == 13 and not battle.party[0].guard, "Guard halves and consumes next hit")
-	battle.reset()
+	check(event.hits[0].amount == 16 and not battle.party[0].guard, "Guard strength scales with accuracy and consumes next hit")
+	reset_duo(battle)
 	battle.party[0].hp = 50
 	battle.turn_cursor = 1
 	event = battle.apply_player(1, battle.actions(1)[2], 0, 1)
@@ -60,21 +61,20 @@ func run() -> void:
 	check(battle.apply_player(1, battle.actions(1)[2], 0, 1).is_empty(), "Healing cannot revive")
 	event = battle.apply_player(1, battle.actions(1)[4], 0, 0)
 	check(battle.party[0].hp == 55 and battle.tonics == 1, "Tonic revives and spends inventory")
-	battle.reset()
+	reset_duo(battle)
 	battle.party[1].hp = 0
-	battle.advance_turn()
-	check(battle.turn_cursor == 2, "Fallen ally is skipped in turn order")
+	check(battle.queue_action(0, battle.actions(0)[0], -1, 1) and battle.next_planner() == -1, "Fallen ally is skipped during planning")
 	check(battle.intent().target == 0, "Enemy retargets surviving hero")
 	battle.round_number = 3
 	check(battle.intent().target == -1, "Every third round announces party attack")
-	battle.reset()
+	reset_duo(battle)
 	battle.turn_cursor = 2
 	battle.enemy.hp = 5
 	battle.enemy.burn = 10
 	battle.enemy.burn_turns = 1
 	event = battle.apply_enemy()
 	check(battle.outcome == "victory" and event.hits.is_empty(), "Burn kill prevents enemy attack")
-	battle.reset()
+	reset_duo(battle)
 	battle.party[0].hp = 1
 	battle.party[1].hp = 0
 	battle.turn_cursor = 2
@@ -97,12 +97,13 @@ func run() -> void:
 	var scene = load("res://scenes/combat.tscn").instantiate()
 	root.add_child(scene)
 	await process_frame
-	check(scene.phase == "select" and scene.heroes.size() == 2, "Combat scene initializes")
+	bench_maro(scene)
+	check(scene.phase == "select" and scene.heroes.size() == 3, "Combat scene initializes")
 	scene.choose_action(1)
 	check(scene.phase == "rhythm" and scene.rhythm.instrument == "guitar", "Warrior skill launches guitar")
 	play_perfect(scene.rhythm)
 	await wait_for_command(scene)
-	check(scene.battle.turn_cursor == 1 and scene.battle.enemy.hp == 538, "Guitar accuracy resolves into skill damage and mage turn")
+	check(scene.battle.turn_cursor == 1 and scene.battle.enemy.hp == 650 and scene.battle.queued_actions.size() == 1, "Guitar score queues without dealing damage before mage planning")
 	scene.choose_action(2)
 	check(scene.phase == "target", "Healing opens ally target selection")
 	scene._show_commands()
@@ -118,12 +119,13 @@ func run() -> void:
 		await wait_for_command(scene)
 	check(scene.phase == "victory" and scene.battle.enemy.hp == 0, "Full encounter reaches victory via both instruments")
 	scene.restart()
+	bench_maro(scene)
 	check(scene.phase == "select" and scene.battle.enemy.hp == 650 and scene.battle.tonics == 2, "Replay resets battle and inventory")
 	# Use actual audio playback for one no-input phrase and its completion signal.
 	scene.choose_action(0)
-	await create_timer(5.1).timeout
+	await create_timer(scene.rhythm.EMPTY_RUNWAY_SECONDS + scene.rhythm.END + 1.2).timeout
 	check(scene.phase == "select" and scene.battle.turn_cursor == 1, "Real audio phrase completes and advances turn")
-	check(scene.battle.enemy.hp == 614, "No-input rhythm applies baseline attack")
+	check(scene.battle.enemy.hp == 650, "No-input rhythm misses")
 	scene.battle.party[0].hp = 100
 	scene.choose_action(2)
 	scene.choose_target(0)
@@ -131,14 +133,29 @@ func run() -> void:
 	await wait_for_command(scene)
 	check(scene.battle.party[0].hp >= 155, "Targeted healing completes its scene animation and enemy response")
 	scene.restart()
+	bench_maro(scene)
 	scene.choose_action(2)
 	play_perfect(scene.rhythm)
 	await wait_for_command(scene)
-	check(scene.battle.party[0].shield == 34 and scene.battle.party[1].shield == 34, "Iron Chorus animates and shields the party")
+	check(scene.battle.party[0].shield == 0 and scene.battle.queued_actions.size() == 1, "Iron Chorus waits for the party queue")
 	scene.choose_action(3)
+	check(scene.phase == "rhythm" and scene.rhythm.instrument == "piano", "Mage guarding launches Chordfall")
+	play_perfect(scene.rhythm)
 	await wait_for_command(scene)
-	check(scene.battle.party[0].hp == 180 and scene.battle.party[0].shield == 9, "Guard command and shield absorption advance through enemy turn")
+	check(scene.battle.party[0].hp == 180 and scene.battle.party[0].shield == 26 and scene.battle.party[1].guard_strength == 1.0, "Rhythm guard and shield absorption advance through enemy turn")
 	scene.restart()
+	bench_maro(scene)
+	scene.choose_action(3)
+	check(scene.phase == "rhythm" and scene.rhythm.instrument == "guitar", "Warrior guarding launches Strumline")
+	play_perfect(scene.rhythm)
+	await wait_for_command(scene)
+	check(scene.battle.party[0].guard_strength == 0.0 and scene.battle.queued_for(0).accuracy == 1.0, "Perfect warrior guard is recorded for queue resolution")
+	scene.choose_action(0)
+	play_perfect(scene.rhythm)
+	await wait_for_command(scene)
+	check(scene.battle.party[0].hp == 180 and not scene.battle.party[0].guard, "Queued perfect guard blocks the enemy response")
+	scene.restart()
+	bench_maro(scene)
 	scene.battle.party[1].hp = 0
 	scene._update_poses()
 	scene.choose_action(4)
@@ -146,8 +163,10 @@ func run() -> void:
 	await wait_for_command(scene)
 	check(scene.battle.party[1].hp == 55 and not scene.heroes[1].dead and scene.battle.tonics == 1, "Tonic revives the mage visually and consumes inventory")
 	scene.restart()
+	bench_maro(scene)
 	scene.choose_action(1)
 	scene.restart()
+	bench_maro(scene)
 	check(not scene.rhythm.active and scene.battle.party[0].mp == 24 and scene.phase == "select", "Restart cancels performance without stale damage or MP cost")
 	# Verify packed effect coordinates against the actual supplied image dimensions.
 	for spec in scene.EFFECTS.values():
@@ -160,6 +179,7 @@ func run() -> void:
 			valid = valid and int(values[1]) + int(values[3]) <= texture.get_height()
 		check(valid, "Effect atlas rectangles stay within " + str(spec[0]))
 	scene.restart()
+	bench_maro(scene)
 	scene.battle.party[0].hp = 0
 	scene.battle.party[1].hp = 0
 	scene.battle._check_outcome()
@@ -209,3 +229,13 @@ func key(node: Node, code: int, pressed: bool) -> void:
 	event.physical_keycode = code
 	event.pressed = pressed
 	node._input(event)
+
+func reset_duo(battle: RefCounted) -> void:
+	battle.reset()
+	battle.party.resize(2)
+
+func bench_maro(scene: Node) -> void:
+	# Keep the original two-character encounter scenarios as regressions.
+	scene.battle.party[2].hp = 0
+	scene._update_poses()
+	scene._show_commands()

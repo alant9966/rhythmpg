@@ -98,6 +98,8 @@ func run() -> void:
 	scene.battle.enemy.hp = 420
 	scene.battle.enemy.burn = 12
 	scene.battle.enemy.burn_turns = 2
+	scene.battle.party[0].guard = true
+	scene.battle.party[0].guard_strength = 0.375
 	scene._show_commands()
 	check(shell.save_slot(1) == "Saved in slot 1.", "Overwrite save slot")
 	scene.battle.party[0].hp = 1
@@ -110,10 +112,17 @@ func run() -> void:
 	check(scene.battle.party[0].hp == 89 and scene.battle.party[1].mp == 19, "Loading restores HP and MP")
 	check(scene.battle.tonics == 1 and scene.battle.round_number == 2 and scene.battle.enemy.hp == 420, "Loading restores round, inventory and enemy")
 	check(scene.battle.enemy.burn == 12 and scene.battle.enemy.burn_turns == 2 and scene.phase == "select", "Loading restores status effects at safe command point")
+	check(scene.battle.party[0].guard and scene.battle.party[0].guard_strength == 0.375, "Loading preserves accuracy-based guard strength")
+	var legacy: Dictionary = scene.make_save()
+	for hero in legacy.party:
+		hero.erase("guard_strength")
+	check(scene.valid_save(legacy), "Older saves without guard strength remain valid")
+	scene.restore_save(legacy)
+	check(scene.battle.party[0].guard_strength == 0.5, "Older active guards migrate to their original 50% protection")
 	check(not paused and not shell.is_open, "Loading unpauses safely")
 	# No enemy damage or turn handoff may run through a global pause.
 	scene.restart()
-	scene.battle.turn_cursor = 2
+	scene.battle.turn_cursor = scene.battle.party.size()
 	scene._enemy_turn()
 	shell.open_menu()
 	await create_timer(0.9).timeout

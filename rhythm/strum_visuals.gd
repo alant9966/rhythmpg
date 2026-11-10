@@ -19,7 +19,8 @@ static func arrow(canvas: CanvasItem, center: Vector2, direction: int, height: f
 		points.append(center + Vector2(point.x, point.y * direction) * height)
 	canvas.draw_colored_polygon(points, color)
 
-static func pattern(canvas: CanvasItem, origin: Vector2, spacing: float, height: float) -> void:
-	var directions := [1, 1, -1, -1, 1, -1]
+static func pattern(canvas: CanvasItem, origin: Vector2, spacing: float, height: float, directions: Array = []) -> void:
+	if directions.is_empty():
+		directions = [1, 1, -1, -1, 1, -1]
 	for i in range(directions.size()):
 		arrow(canvas, origin + Vector2(i * spacing, 0), directions[i], height, GOLD)
