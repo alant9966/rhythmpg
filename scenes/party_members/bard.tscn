@@ -26,18 +26,6 @@ region = Rect2(336, 240, 48, 48)
 atlas = ExtResource("1_q16a0")
 region = Rect2(384, 240, 48, 48)
 
-[sub_resource type="AtlasTexture" id="AtlasTexture_w5ye6"]
-atlas = ExtResource("1_q16a0")
-region = Rect2(288, 288, 48, 48)
-
-[sub_resource type="AtlasTexture" id="AtlasTexture_2mpo8"]
-atlas = ExtResource("1_q16a0")
-region = Rect2(336, 288, 48, 48)
-
-[sub_resource type="AtlasTexture" id="AtlasTexture_t2dpt"]
-atlas = ExtResource("1_q16a0")
-region = Rect2(384, 288, 48, 48)
-
 [sub_resource type="AtlasTexture" id="AtlasTexture_3hfr8"]
 atlas = ExtResource("1_q16a0")
 region = Rect2(288, 336, 48, 48)
@@ -67,7 +55,7 @@ animations = [{
 }],
 "loop": 1,
 "name": &"overworld_down",
-"speed": 5.0
+"speed": 10.0
 }, {
 "frames": [],
 "loop": 1,
@@ -89,23 +77,6 @@ animations = [{
 }],
 "loop": 1,
 "name": &"overworld_left",
-"speed": 5.0
-}, {
-"frames": [{
-"duration": 1.0,
-"texture": SubResource("AtlasTexture_w5ye6")
-}, {
-"duration": 1.0,
-"texture": SubResource("AtlasTexture_2mpo8")
-}, {
-"duration": 1.0,
-"texture": SubResource("AtlasTexture_t2dpt")
-}, {
-"duration": 1.0,
-"texture": SubResource("AtlasTexture_2mpo8")
-}],
-"loop": 1,
-"name": &"overworld_right",
 "speed": 5.0
 }, {
 "frames": [{
@@ -134,8 +105,7 @@ size = Vector2(19, 31)
 [node name="AnimatedSprite2D" type="AnimatedSprite2D" parent="." unique_id=819649181]
 sprite_frames = SubResource("SpriteFrames_eae6q")
 animation = &"overworld_down"
-frame = 3
-frame_progress = 0.33166358
+autoplay = "overworld_down"
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="." unique_id=717653751]
 position = Vector2(0.5, 8.5)

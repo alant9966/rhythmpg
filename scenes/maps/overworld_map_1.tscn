@@ -1,6 +1,8 @@
 [gd_scene format=4 uid="uid://bh3tdffijykp3"]
 
 [ext_resource type="Texture2D" uid="uid://bqvfgwkjj5c5s" path="res://assets/map/gentle sheets/gentle forest v01.png" id="1_b5xha"]
+[ext_resource type="PackedScene" uid="uid://d057n14xf0ryq" path="res://scenes/party_members/bard.tscn" id="2_v2bo2"]
+[ext_resource type="Script" uid="uid://dtgt7sqtpo4yi" path="res://scenes/party_members/player.gd" id="3_63ip1"]
 
 [sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_wqtvf"]
 texture = ExtResource("1_b5xha")
@@ -273,3 +275,17 @@ shape = SubResource("RectangleShape2D_6q4g5")
 [node name="CollisionShape2D" type="CollisionShape2D" parent="borders/top_border" unique_id=1427322368]
 position = Vector2(592, 209)
 shape = SubResource("RectangleShape2D_6q4g5")
+
+[node name="Bard" parent="." unique_id=917108026 instance=ExtResource("2_v2bo2")]
+position = Vector2(402, 556)
+script = ExtResource("3_63ip1")
+
+[node name="Camera2D2" type="Camera2D" parent="Bard" unique_id=755835272]
+zoom = Vector2(3, 3)
+process_callback = 0
+limit_left = 224
+limit_top = 224
+limit_right = 960
+limit_bottom = 640
+position_smoothing_enabled = true
+position_smoothing_speed = 7.5
