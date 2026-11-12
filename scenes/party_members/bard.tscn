@@ -61,6 +61,9 @@ animations = [{
 }, {
 "duration": 1.0,
 "texture": SubResource("AtlasTexture_xaep5")
+}, {
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_1dpjp")
 }],
 "loop": 1,
 "name": &"overworld_down",
@@ -80,6 +83,9 @@ animations = [{
 }, {
 "duration": 1.0,
 "texture": SubResource("AtlasTexture_gnm2d")
+}, {
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_0ov8k")
 }],
 "loop": 1,
 "name": &"overworld_left",
@@ -94,6 +100,9 @@ animations = [{
 }, {
 "duration": 1.0,
 "texture": SubResource("AtlasTexture_t2dpt")
+}, {
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_2mpo8")
 }],
 "loop": 1,
 "name": &"overworld_right",
@@ -108,6 +117,9 @@ animations = [{
 }, {
 "duration": 1.0,
 "texture": SubResource("AtlasTexture_mx3rf")
+}, {
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_ruc0y")
 }],
 "loop": 1,
 "name": &"overworld_up",
@@ -121,9 +133,9 @@ size = Vector2(19, 31)
 
 [node name="AnimatedSprite2D" type="AnimatedSprite2D" parent="." unique_id=819649181]
 sprite_frames = SubResource("SpriteFrames_eae6q")
-animation = &"overworld_up"
-frame = 2
-frame_progress = 0.5369336
+animation = &"overworld_down"
+frame = 3
+frame_progress = 0.33166358
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="." unique_id=717653751]
 position = Vector2(0.5, 8.5)
