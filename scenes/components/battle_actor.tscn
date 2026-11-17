@@ -1,0 +1,18 @@
+[gd_scene format=3 uid="uid://c1bdv7f7pla3d"]
+
+[ext_resource type="Texture2D" uid="uid://cf8j6a0wr578h" path="res://assets/characters/warrior.png" id="1_lsxm8"]
+
+[node name="BattleActor" type="Node2D" unique_id=336087547]
+texture_filter = 1
+
+[node name="Shadow" type="Polygon2D" parent="." unique_id=2068168718]
+
+[node name="Sprite" type="Sprite2D" parent="." unique_id=1379925399]
+position = Vector2(-1, -24)
+texture = ExtResource("1_lsxm8")
+
+[node name="TimpaniProps" type="Node2D" parent="." unique_id=337982841]
+
+[node name="EffectAnchor" type="Marker2D" parent="." unique_id=1432408629]
+
+[node name="AnimationPlayer" type="AnimationPlayer" parent="." unique_id=501211583]
