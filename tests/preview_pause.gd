@@ -15,6 +15,8 @@ func run() -> void:
 	root.add_child(scene)
 	await create_timer(0.2).timeout
 	scene.choose_action(1)
+	scene.choose_action(0)
+	scene.choose_action(0)
 	await shot("prepare")
 	shell.open_menu()
 	for page in ["main", "saves", "controls", "guide", "quit"]:

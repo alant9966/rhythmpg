@@ -24,6 +24,8 @@ func run() -> void:
 	current_scene = scene
 	await settle_scene()
 	scene.choose_action(0)
+	scene.choose_action(0)
+	scene.choose_action(0)
 	await process_frame
 	check(scene.rhythm.visible and scene.rhythm.size.is_equal_approx(scene.size), "Performance covers battle viewport")
 	check(scene.rhythm.position.is_zero_approx() and scene.rhythm.z_index > 0, "Overlay renders above HUD")

@@ -1,58 +1,31 @@
 extends Node2D
-## RPG Maker-style side-view sheet: 9 columns x 6 rows, 3 frames per motion.
-var texture: Texture2D
-var cell := Vector2(48, 48)
-var motion := 1
-var clock := 0.0
+## Visuals and frame animations are authored in the reusable actor scene.
+@export var has_timpani := false
+@export var idle_animation: StringName = &"idle"
+@onready var sprite: Sprite2D = $Sprite
+@onready var animation_player: AnimationPlayer = $AnimationPlayer
+@onready var timpani: Node2D = $TimpaniProps
+var ground := Vector2.ZERO
+var motion := -1
 var flash := 0.0
 var dead := false
-var facing_right := false
-var sprite: Sprite2D
-var ground := Vector2.ZERO
-var has_timpani := false
-
-func setup(path: String, feet: Vector2, depth_scale: float, enemy: bool = false) -> void:
-	texture = load(path)
-	cell = texture.get_size() / Vector2(9, 6)
-	position = feet
-	ground = feet
-	scale = Vector2.ONE * depth_scale
-	facing_right = enemy
+const MOTIONS := {1: "idle", 2: "chant", 3: "guard", 4: "hurt", 7: "attack",
+	9: "drum", 10: "cast", 13: "victory", 17: "defeat"}
 
 func _ready() -> void:
-	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	sprite = Sprite2D.new()
-	sprite.texture = texture
-	sprite.region_enabled = true
-	sprite.position = Vector2(0, -cell.y * 0.5)
-	sprite.flip_h = facing_right
-	add_child(sprite)
+	ground = position
+	timpani.visible = has_timpani
+	play(1)
 
 func play(value: int) -> void:
+	if motion == value and (animation_player.is_playing() or value in [4, 7, 10, 17]):
+		return
 	motion = value
-	clock = 0.0
+	sprite.offset = Vector2.ZERO
+	sprite.scale = Vector2.ONE
+	animation_player.play(idle_animation if value == 1 else MOTIONS.get(value, "idle"))
 
 func _process(delta: float) -> void:
-	clock += delta
 	flash = maxf(0, flash - delta)
-	var frame := mini(2, int(clock * 8)) if motion in [4, 7, 10, 17] else int(clock * 5) % 3
-	var column := (motion / 6) * 3 + frame
-	var row := motion % 6
-	sprite.region_rect = Rect2(Vector2(column * cell.x, row * cell.y), cell)
 	sprite.modulate = Color(3, 1.5, 1.2) if flash > 0 else (Color("858595") if dead else Color.WHITE)
-	queue_redraw()
-
-func _draw() -> void:
-	draw_set_transform(Vector2(0, -2), 0, Vector2(1, 0.28))
-	draw_circle(Vector2.ZERO, cell.x * 0.26, Color(0.02, 0.03, 0.04, 0.48))
-	draw_set_transform(Vector2.ZERO)
-	if has_timpani and not dead:
-		for x in [-19, 13]:
-			draw_line(Vector2(x - 5, -5), Vector2(x - 6, 2), Color("382c2d"), 2)
-			draw_line(Vector2(x + 5, -5), Vector2(x + 6, 2), Color("382c2d"), 2)
-			draw_colored_polygon(PackedVector2Array([Vector2(x - 9, -12), Vector2(x + 9, -12), Vector2(x + 6, -5), Vector2(x - 6, -5)]), Color("a46746"))
-			draw_line(Vector2(x - 5, -10), Vector2(x - 3, -6), Color("d7a36a"), 1)
-			draw_set_transform(Vector2(x, -12), 0, Vector2(1, 0.35))
-			draw_circle(Vector2.ZERO, 9, Color("4b3935"))
-			draw_circle(Vector2.ZERO, 7.5, Color("e2c69a"))
-			draw_set_transform(Vector2.ZERO)
+	timpani.visible = has_timpani and not dead

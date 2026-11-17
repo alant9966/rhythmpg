@@ -32,7 +32,7 @@ func run() -> void:
 			var event: Dictionary = battle.apply_player(actor, action, 0 if action.target == "ally" else -1, 0)
 			check(event.missed and event.amount == 0 and not event.perfect, "%s zero accuracy misses" % action.name)
 			check(battle.enemy.hp == 650 and battle.enemy.burn_turns == 0 and battle.enemy.exposed_turns == 0, "%s miss does not damage or debuff" % action.name)
-			check(battle.party[0].hp == 50 and battle.party[1].hp == 50 and battle.party[0].shield == 0 and not battle.party[actor].guard, "%s miss grants no support" % action.name)
+			check(battle.party[0].hp == 50 and battle.party[1].hp == 50 and battle.party[0].shield == 0 and not battle.party[actor].guard and battle.party[0].haste == 0 and battle.enemy.slow == 0, "%s miss grants no support" % action.name)
 			check(battle.party[actor].mp == 12 - action.cost, "%s miss spends its MP cost without recovery" % action.name)
 	# Every integer accuracy 1..99 scales direct damage monotonically without bonus.
 	for actor in range(2):

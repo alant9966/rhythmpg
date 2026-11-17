@@ -1,6 +1,7 @@
 extends SceneTree
 const Rules = preload("res://combat/battle_state.gd")
 const Rhythm = preload("res://combat/combat_rhythm.gd")
+const Helpers = preload("res://tests/combat_test_helpers.gd")
 const Session = preload("res://rhythm/rhythm_session.gd")
 var checks := 0
 var failures := 0
@@ -93,81 +94,65 @@ func run() -> void:
 		session.advance(Rhythm.END, 10 if mode == "piano" else 3)
 		check(session.accuracy() == 1.0 and session.is_complete(), mode + " combat chart scores 100%")
 		check(Rhythm.END < 3.0, mode + " combat performance lasts under three seconds")
-	# Scene integration: complete a real battle through commands and instrument input.
+	# Scene integration: commands first, actual instruments at execution.
 	var scene = load("res://scenes/combat.tscn").instantiate()
 	root.add_child(scene)
 	await process_frame
 	bench_maro(scene)
-	check(scene.phase == "select" and scene.heroes.size() == 3, "Combat scene initializes")
+	check(scene.phase == "select" and scene.heroes.size() == 3, "Combat scene initializes editor actors")
 	scene.choose_action(1)
-	check(scene.phase == "rhythm" and scene.rhythm.instrument == "guitar", "Warrior skill launches guitar")
-	play_perfect(scene.rhythm)
-	await wait_for_command(scene)
-	check(scene.battle.turn_cursor == 1 and scene.battle.enemy.hp == 650 and scene.battle.queued_actions.size() == 1, "Guitar score queues without dealing damage before mage planning")
+	check(scene.phase == "select" and scene.battle.turn_cursor == 1 and not scene.rhythm.active, "Warrior command waits without a performance or cost")
+	check(scene.battle.enemy.hp == 650 and scene.battle.party[0].mp == 24, "Planning applies no damage or resource costs")
 	scene.choose_action(2)
 	check(scene.phase == "target", "Healing opens ally target selection")
 	scene._show_commands()
-	for turn in range(12):
+	for round_index in range(8):
 		if not scene.battle.outcome.is_empty():
 			break
-		var actor: int = scene.battle.turn_cursor
-		if actor == 2:
-			await wait_for_command(scene)
-			continue
-		scene.choose_action(1 if scene.battle.party[actor].mp >= (6 if actor == 0 else 8) else 0)
-		play_perfect(scene.rhythm)
-		await wait_for_command(scene)
+		while scene.phase == "select":
+			var actor: int = scene.battle.turn_cursor
+			scene.choose_action(1 if scene.battle.party[actor].mp >= (6 if actor == 0 else 8) else 0)
+		check(await Helpers.finish_round(scene), "Round completes through actual rhythm scoring")
 	check(scene.phase == "victory" and scene.battle.enemy.hp == 0, "Full encounter reaches victory via both instruments")
 	scene.restart()
 	bench_maro(scene)
 	check(scene.phase == "select" and scene.battle.enemy.hp == 650 and scene.battle.tonics == 2, "Replay resets battle and inventory")
-	# Use actual audio playback for one no-input phrase and its completion signal.
 	scene.choose_action(0)
+	scene.choose_action(3)
+	check(scene.rhythm.instrument == "guitar", "First acting ally starts guitar after all commands")
 	await create_timer(scene.rhythm.EMPTY_RUNWAY_SECONDS + scene.rhythm.END + 1.2).timeout
-	check(scene.phase == "select" and scene.battle.turn_cursor == 1, "Real audio phrase completes and advances turn")
-	check(scene.battle.enemy.hp == 650, "No-input rhythm misses")
+	check(scene.battle.enemy.hp == 650 and scene.resonance == [0.0], "Actual no-input audio performance misses at execution")
+	check(await Helpers.finish_round(scene), "Remaining rhythm and enemy action finish round")
+	scene.restart()
+	bench_maro(scene)
 	scene.battle.party[0].hp = 100
+	scene.choose_action(3)
 	scene.choose_action(2)
 	scene.choose_target(0)
-	play_perfect(scene.rhythm)
-	await wait_for_command(scene)
-	check(scene.battle.party[0].hp >= 155, "Targeted healing completes its scene animation and enemy response")
+	check(await Helpers.finish_round(scene) and scene.battle.party[0].hp == 180, "Queued guard precedes enemy and targeted healing still resolves")
 	scene.restart()
 	bench_maro(scene)
 	scene.choose_action(2)
-	play_perfect(scene.rhythm)
-	await wait_for_command(scene)
-	check(scene.battle.party[0].shield == 0 and scene.battle.queued_actions.size() == 1, "Iron Chorus waits for the party queue")
+	check(scene.battle.party[0].shield == 0, "Iron Chorus waits during planning")
 	scene.choose_action(3)
-	check(scene.phase == "rhythm" and scene.rhythm.instrument == "piano", "Mage guarding launches Chordfall")
 	play_perfect(scene.rhythm)
-	await wait_for_command(scene)
-	check(scene.battle.party[0].hp == 180 and scene.battle.party[0].shield == 26 and scene.battle.party[1].guard_strength == 1.0, "Rhythm guard and shield absorption advance through enemy turn")
-	scene.restart()
-	bench_maro(scene)
-	scene.choose_action(3)
-	check(scene.phase == "rhythm" and scene.rhythm.instrument == "guitar", "Warrior guarding launches Strumline")
-	play_perfect(scene.rhythm)
-	await wait_for_command(scene)
-	check(scene.battle.party[0].guard_strength == 0.0 and scene.battle.queued_for(0).accuracy == 1.0, "Perfect warrior guard is recorded for queue resolution")
-	scene.choose_action(0)
-	play_perfect(scene.rhythm)
-	await wait_for_command(scene)
-	check(scene.battle.party[0].hp == 180 and not scene.battle.party[0].guard, "Queued perfect guard blocks the enemy response")
+	check(await Helpers.finish_round(scene), "Shield and piano guard resolve around enemy action")
+	check(scene.battle.party[0].hp == 180 and scene.battle.party[0].shield == 26 and scene.battle.party[1].guard_strength == 1.0, "Shield absorption and guard survive interleaved enemy turn")
 	scene.restart()
 	bench_maro(scene)
 	scene.battle.party[1].hp = 0
 	scene._update_poses()
 	scene.choose_action(4)
 	scene.choose_target(1)
-	await wait_for_command(scene)
-	check(scene.battle.party[1].hp == 55 and not scene.heroes[1].dead and scene.battle.tonics == 1, "Tonic revives the mage visually and consumes inventory")
+	check(await Helpers.finish_round(scene), "Tonic-only round completes without a minigame")
+	check(scene.battle.party[1].hp == 55 and not scene.heroes[1].dead and scene.battle.tonics == 1, "Tonic revives mage visually and consumes inventory")
 	scene.restart()
 	bench_maro(scene)
 	scene.choose_action(1)
+	scene.choose_action(0)
 	scene.restart()
 	bench_maro(scene)
-	check(not scene.rhythm.active and scene.battle.party[0].mp == 24 and scene.phase == "select", "Restart cancels performance without stale damage or MP cost")
+	check(not scene.rhythm.active and scene.battle.party[0].mp == 24 and scene.phase == "select", "Restart cancels active execution performance without stale costs")
 	# Verify packed effect coordinates against the actual supplied image dimensions.
 	for spec in scene.EFFECTS.values():
 		var texture: Texture2D = load(spec[0])
@@ -200,6 +185,7 @@ func wait_for_command(scene: Node) -> void:
 	check(false, "Scene action flow timed out")
 
 func play_perfect(rhythm: Node) -> void:
+	Helpers.prepare(rhythm)
 	rhythm.preparation_left = 0
 	var mode: String = rhythm.instrument
 	var chart: Array[Dictionary] = rhythm.session.notes.duplicate(true)

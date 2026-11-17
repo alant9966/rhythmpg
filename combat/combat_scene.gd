@@ -2,15 +2,14 @@ extends Control
 const Shell = preload("res://global/game_shell.gd")
 @onready var shell: Shell = get_node("/root/GameShell")
 
+const HUDView = preload("res://combat/battle_hud_view.gd")
+const CommandButton = preload("res://combat/command_button.gd")
 const Rules = preload("res://combat/battle_state.gd")
-const Actor = preload("res://combat/battle_actor.gd")
-const Stage = preload("res://combat/battle_stage.gd")
-const BattleRhythm = preload("res://combat/combat_rhythm.gd")
-const GOLD := Color("eaca8a")
-const WHITE := Color("eef0e9")
-const MUTED := Color("a5b4bd")
-const TEAL := Color("83d4c4")
-const BLUE := Color("9fb9ef")
+const GOLD := Color("c5ae7b")
+const WHITE := Color("eee7d7")
+const MUTED := Color("ada99e")
+const TEAL := Color("9ca984")
+const BLUE := Color("98a6b8")
 const EFFECTS := {
 	"strike": ["res://assets/effects/Impacts/symmetrical_impact_004/symmetrical_impact_004_small_yellow/spritesheet.png", 48, 8],
 	"fire": ["res://assets/effects/Fire/fire_looping_004B/fire_looping_004B_small_orange/spritesheet.png", 64, 0],
@@ -22,10 +21,13 @@ const EFFECTS := {
 var battle = Rules.new()
 var phase := "select"
 var generation := 0
-var stage: Node2D
+@onready var screen_backdrop: TextureRect = $ScreenBackdrop
+@onready var stage: Node2D = $Battlefield
+@onready var effects: Node2D = $Battlefield/Effects
+@onready var hud: Control = $HUD
 var heroes: Array[Node2D] = []
-var foe: Node2D
-var rhythm: Control
+@onready var foe: Node2D = $Battlefield/Actors/Warden
+@onready var rhythm: Control = $RhythmOverlay
 var font: Font
 var buttons: Array[Button] = []
 var selected_action: Dictionary = {}
@@ -38,53 +40,104 @@ var resonance: Array[float] = []
 var elapsed := 0.0
 var enemy_hp := 650.0
 var hero_hp := [180.0, 124.0, 148.0]
-var bgm: AudioStreamPlayer
-var impact: AudioStreamPlayer
+@onready var bgm: AudioStreamPlayer = $Audio/BattleMusic
+@onready var impact: AudioStreamPlayer = $Audio/ImpactSound
 var live_tweens: Array[Tween] = []
 var save_checkpoint: Dictionary = {}
+@export_category("Rhythm Focus")
+@export_range(1.0, 1.4, 0.01) var rhythm_camera_zoom := 1.05
+@export_range(1.0, 1.4, 0.01) var rhythm_actor_zoom := 1.04
+@export var rhythm_actor_feet := Vector2(965, 535)
+@export_range(0.2, 2.0, 0.05) var rhythm_focus_in_seconds := 1.1
+@export_range(0.2, 2.0, 0.05) var rhythm_focus_out_seconds := 1.0
+@export_range(0.1, 0.5, 0.05) var rhythm_hud_fade_seconds := 0.25
+var focused_actor: Node2D
+var focus_tween: Tween
+var focus_restore: Dictionary = {}
+
+func _begin_rhythm_focus(actor: Node2D) -> void:
+	_end_rhythm_focus()
+	focused_actor = actor
+	focus_restore = {"stage_position": stage.position, "stage_scale": stage.scale,
+		"actor_scale": actor.scale, "z_index": actor.z_index, "z_relative": actor.z_as_relative,
+		"background_scale": $Battlefield/Background.scale, "background_position": $Battlefield/Background.position}
+	# Lift the real actor, including its props, above the full-scene dimmer.
+	actor.z_as_relative = false
+	actor.z_index = 40
+	focus_tween = create_tween().set_parallel(true)
+	focus_tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	rhythm.gameplay_revealed = false
+	rhythm.presentation_weight = 0.0
+	focus_tween.tween_property(rhythm, "presentation_weight", 1.0, rhythm_focus_in_seconds)
+	focus_tween.tween_property(stage, "scale", Vector2.ONE * rhythm_camera_zoom, rhythm_focus_in_seconds)
+	focus_tween.tween_property(stage, "position", rhythm_actor_feet - actor.ground * rhythm_camera_zoom, rhythm_focus_in_seconds)
+	focus_tween.tween_property(actor, "scale", actor.scale * rhythm_actor_zoom, rhythm_focus_in_seconds)
+	# Overscan the painted backdrop so the camera pan never reveals empty edges.
+	var backdrop: Sprite2D = $Battlefield/Background
+	var center := backdrop.position + backdrop.texture.get_size() * backdrop.scale * 0.5
+	var enlarged := backdrop.scale * 1.35
+	focus_tween.tween_property(backdrop, "scale", enlarged, rhythm_focus_in_seconds)
+	focus_tween.tween_property(backdrop, "position", center - backdrop.texture.get_size() * enlarged * 0.5, rhythm_focus_in_seconds)
+	# The HUD covers the unpainted lower stage until the backdrop has expanded.
+	focus_tween.chain().tween_property(hud, "modulate:a", 0.0, rhythm_hud_fade_seconds)
+	focus_tween.chain().tween_callback(rhythm.reveal_gameplay)
+
+func _return_rhythm_focus() -> void:
+	if focus_tween and focus_tween.is_valid():
+		focus_tween.kill()
+	rhythm.begin_outro()
+	focus_tween = create_tween().set_parallel(true)
+	focus_tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	# Fully restore the lower HUD before shrinking the painted backdrop.
+	focus_tween.tween_property(hud, "modulate:a", 1.0, rhythm_hud_fade_seconds)
+	focus_tween.chain().tween_property(stage, "scale", focus_restore.stage_scale, rhythm_focus_out_seconds)
+	focus_tween.tween_property(stage, "position", focus_restore.stage_position, rhythm_focus_out_seconds)
+	focus_tween.tween_property(focused_actor, "scale", focus_restore.actor_scale, rhythm_focus_out_seconds)
+	focus_tween.tween_property($Battlefield/Background, "scale", focus_restore.background_scale, rhythm_focus_out_seconds)
+	focus_tween.tween_property($Battlefield/Background, "position", focus_restore.background_position, rhythm_focus_out_seconds)
+	focus_tween.tween_property(rhythm, "presentation_weight", 0.0, rhythm_focus_out_seconds)
+	# This timer pauses with gameplay and still completes safely if restart kills the tween.
+	await get_tree().create_timer(rhythm_hud_fade_seconds + rhythm_focus_out_seconds, false).timeout
+
+func _end_rhythm_focus() -> void:
+	if focus_tween and focus_tween.is_valid():
+		focus_tween.kill()
+	if is_instance_valid(focused_actor) and not focus_restore.is_empty():
+		focused_actor.scale = focus_restore.actor_scale
+		focused_actor.z_index = focus_restore.z_index
+		focused_actor.z_as_relative = focus_restore.z_relative
+		stage.position = focus_restore.stage_position
+		stage.scale = focus_restore.stage_scale
+		$Battlefield/Background.scale = focus_restore.background_scale
+		$Battlefield/Background.position = focus_restore.background_position
+	focused_actor = null
+	focus_restore.clear()
+	hud.modulate.a = 1.0
+	rhythm.end_outro()
+
 
 func _ready() -> void:
-	font = ThemeDB.fallback_font
-	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	stage = Stage.new()
-	stage.z_index = -20
-	add_child(stage)
-	# Back-to-front staging: mage in the distance, enemy midground, warrior near.
-	var mage = Actor.new()
-	mage.setup("res://assets/characters/mage.png", Vector2(1030, 375), 2.6)
-	mage.z_index = 1
-	stage.add_child(mage)
-	foe = Actor.new()
-	foe.setup("res://assets/enemies/Monster_4 SV Battler.png", Vector2(302, 454), 3.6, true)
-	foe.z_index = 3
-	stage.add_child(foe)
-	var warrior = Actor.new()
-	warrior.setup("res://assets/characters/warrior.png", Vector2(930, 495), 3.2)
-	warrior.z_index = 4
-	stage.add_child(warrior)
-	var percussionist = Actor.new()
-	percussionist.setup("res://assets/characters/fighter.png", Vector2(766, 435), 3.0)
-	percussionist.has_timpani = true
-	percussionist.z_index = 2
-	stage.add_child(percussionist)
-	heroes = [warrior, mage, percussionist]
-	rhythm = BattleRhythm.new()
-	add_child(rhythm)
-	rhythm.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	rhythm.z_index = 30
+	_fit_canvas()
+	get_viewport().size_changed.connect(_fit_canvas)
+	font = preload("res://ui/clear_font.tres")
+	texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+	heroes = [$Battlefield/Actors/Rowan, $Battlefield/Actors/Lyra, $Battlefield/Actors/Maro]
 	rhythm.completed.connect(_performance_finished)
-	bgm = AudioStreamPlayer.new()
-	bgm.stream = load("res://audio/battle_theme.wav")
-	bgm.volume_db = -17
-	add_child(bgm)
 	bgm.finished.connect(func(): bgm.play())
 	bgm.play()
-	impact = AudioStreamPlayer.new()
-	impact.stream = load("res://audio/battle_impact.wav")
-	impact.volume_db = -9
-	add_child(impact)
 	_show_commands()
 	shell.register_scene(self)
+
+func _fit_canvas() -> void:
+	# Preserve editor coordinates while fitting the project's current viewport.
+	var available := get_viewport_rect().size
+	var zoom := minf(available.x / size.x, available.y / size.y)
+	scale = Vector2.ONE * zoom
+	position = (available - size * zoom) * 0.5
+	# Forest artwork also fills any margins outside the fitted combat canvas.
+	var backdrop_bounds := get_global_transform_with_canvas().affine_inverse() * get_viewport_rect()
+	screen_backdrop.position = backdrop_bounds.position
+	screen_backdrop.size = backdrop_bounds.size
 
 func _new_button(text: String, bounds: Rect2, callback: Callable, enabled: bool = true) -> Button:
 	var button := Button.new()
@@ -93,13 +146,13 @@ func _new_button(text: String, bounds: Rect2, callback: Callable, enabled: bool 
 	button.size = bounds.size
 	button.disabled = not enabled
 	button.focus_mode = Control.FOCUS_NONE
-	button.add_theme_font_size_override("font_size", 17)
+	button.add_theme_font_size_override("font_size", 15)
 	button.add_theme_color_override("font_color", WHITE)
 	button.add_theme_color_override("font_hover_color", GOLD)
-	button.add_theme_stylebox_override("normal", _box(Color("1c2c37"), Color("52615f")))
-	button.add_theme_stylebox_override("hover", _box(Color("31434b"), GOLD))
-	button.add_theme_stylebox_override("pressed", _box(Color("41534e"), GOLD))
-	button.add_theme_stylebox_override("disabled", _box(Color("17242d"), Color("303f47")))
+	button.add_theme_stylebox_override("normal", _menu_style(Color(0, 0, 0, 0)))
+	button.add_theme_stylebox_override("hover", _menu_style(Color(0.9, 0.86, 0.76, 0.1)))
+	button.add_theme_stylebox_override("pressed", _menu_style(Color(0.9, 0.86, 0.76, 0.18)))
+	button.add_theme_stylebox_override("disabled", _menu_style(Color(0, 0, 0, 0)))
 	button.pressed.connect(callback)
 	add_child(button)
 	buttons.append(button)
@@ -125,14 +178,22 @@ func _show_commands() -> void:
 	var actions: Array[Dictionary] = battle.actions(actor)
 	for i in range(actions.size()):
 		var action: Dictionary = actions[i]
-		var cost := "%d MP" % action.cost if action.cost > 0 else ("x%d" % battle.available_tonics() if action.id == "tonic" else "FREE")
-		var button := _new_button("%s   %s     %s" % [shell.key_name("command_%d" % (i + 1)), action.name, cost], Rect2(447 + (i % 2) * 359, 590 + (i / 2) * 51, 345, 43), func(): choose_action(i), battle.can_plan(actor, action))
-		button.tooltip_text = action.description
+		var cost := "%d MP" % action.cost if action.cost > 0 else ("x%d" % battle.available_tonics() if action.id == "tonic" else "")
+		var button := CommandButton.new()
+		button.position = Vector2(36, 590 + i * 33)
+		button.size = Vector2(286, 31)
+		button.configure(shell.key_name("command_%d" % (i + 1)), str(action.name), cost)
+		button.disabled = not battle.can_plan(actor, action)
+		button.pressed.connect(func(): choose_action(i))
 		button.mouse_entered.connect(func(): description = action.description)
-	description = "Plan each ally's action and rhythm score. The party then acts from highest speed to lowest."
-	_new_button("Rhythm Lab / " + shell.key_name("switch_mode"), Rect2(991, 23, 178, 34), _open_lab)
-	_new_button("Restart encounter", Rect2(806, 23, 174, 34), restart)
-	queue_redraw()
+		button.focus_entered.connect(func(): description = action.description)
+		add_child(button)
+		buttons.append(button)
+	description = "Choose %s’s action." % battle.party[actor].name
+	_new_button("Practice  " + shell.key_name("switch_mode"), Rect2(953, 18, 114, 31), _open_lab)
+	_new_button("Restart", Rect2(867, 18, 78, 31), restart)
+	_new_button("Menu  Esc", Rect2(1075, 18, 92, 31), shell.open_menu)
+	hud.queue_redraw()
 
 func choose_action(index: int) -> void:
 	if phase != "select" or index < 0 or index >= 5:
@@ -148,9 +209,9 @@ func choose_action(index: int) -> void:
 		description = action.description
 		for i in range(battle.party.size()):
 			var hero: Dictionary = battle.party[i]
-			var target_button := _new_button("%s  %s  %d/%d HP" % [shell.key_name("command_%d" % (i + 1)), hero.name, hero.hp, hero.max_hp], Rect2(447 + i * 235, 617, 225, 55), func(): choose_target(i), action.id == "tonic" or hero.hp > 0)
+			var target_button := _new_button("%s  %s  %d/%d HP" % [shell.key_name("command_%d" % (i + 1)), hero.name, hero.hp, hero.max_hp], Rect2(382 + i * 258, 709, 238, 36), func(): choose_target(i), action.id == "tonic" or hero.hp > 0)
 			target_button.add_theme_font_size_override("font_size", 14)
-		_new_button("Back / " + shell.key_name("back"), Rect2(447, 689, 230, 40), _show_commands)
+		_new_button("Back / " + shell.key_name("back"), Rect2(42, 710, 278, 35), _show_commands)
 	else:
 		_begin_action()
 
@@ -164,11 +225,12 @@ func choose_target(index: int) -> void:
 
 func _begin_action() -> void:
 	_clear_buttons()
+	_queue_selection()
+
+func _start_performance() -> void:
 	var actor: int = battle.turn_cursor
-	if selected_action.id == "tonic":
-		_queue_selection(0.0)
-		return
 	phase = "rhythm"
+	_begin_rhythm_focus(heroes[actor])
 	heroes[actor].play(2 if actor == 1 else 3)
 	bgm.volume_db = -29
 	banner = "%s — %s" % [battle.party[actor].name, selected_action.name]
@@ -178,17 +240,23 @@ func _begin_action() -> void:
 func _performance_finished(result: Dictionary) -> void:
 	if phase != "rhythm":
 		return
+	var token := generation
+	var accuracy := float(result.accuracy)
+	resonance.append(accuracy)
+	phase = "focus_return"
+	await _return_rhythm_focus()
+	if token != generation or phase != "focus_return":
+		return
+	_end_rhythm_focus()
 	bgm.volume_db = -17
-	_queue_selection(float(result.accuracy))
+	_resolve_player(accuracy)
 
-func _queue_selection(accuracy: float) -> void:
+func _queue_selection() -> void:
 	var actor: int = battle.turn_cursor
-	if not battle.queue_action(actor, selected_action, selected_target, accuracy):
+	if not battle.queue_action(actor, selected_action, selected_target):
 		_show_commands()
 		return
-	if selected_action.id != "tonic":
-		resonance.append(accuracy)
-	banner = "%s queued %s" % [battle.party[actor].name, selected_action.name]
+	banner = "%s selected %s" % [battle.party[actor].name, selected_action.name]
 	_update_poses()
 	if battle.next_planner() >= 0:
 		_show_commands()
@@ -199,7 +267,6 @@ func _queue_selection(accuracy: float) -> void:
 			_resolve_next_queued_action()
 
 func _resolve_next_queued_action() -> void:
-	# A batch has no minigame gap between hits; keep each result readable.
 	popups.clear()
 	if not battle.outcome.is_empty():
 		_show_outcome()
@@ -209,11 +276,23 @@ func _resolve_next_queued_action() -> void:
 		_show_outcome()
 		return
 	if entry.is_empty():
+		battle.finish_round()
+		banner = "Round %d — plan your party's actions" % battle.round_number
+		_show_commands()
+		return
+	if entry.actor == battle.party.size():
 		_enemy_turn()
 		return
 	selected_action = battle.action_for(int(entry.actor), str(entry.action_id))
 	selected_target = int(entry.target)
-	_resolve_player(float(entry.accuracy))
+	# A target may fall, or an actor may lose resources, before its action.
+	if not battle.can_use(entry.actor, selected_action) or (selected_action.id == "heal" and battle.party[selected_target].hp <= 0):
+		history.append("%s could not use %s." % [battle.party[entry.actor].name, selected_action.name])
+		_resolve_next_queued_action()
+	elif selected_action.id == "tonic":
+		_resolve_player(0.0)
+	else:
+		_start_performance()
 
 func _resolve_player(accuracy: float) -> void:
 	var token := generation
@@ -278,12 +357,7 @@ func _next_turn() -> void:
 	if not battle.outcome.is_empty():
 		_show_outcome()
 		return
-	if phase == "enemy":
-		battle.finish_round()
-		banner = "Round %d — plan your party's actions" % battle.round_number
-		_show_commands()
-	else:
-		_resolve_next_queued_action()
+	_resolve_next_queued_action()
 
 func _enemy_turn() -> void:
 	phase = "enemy"
@@ -349,6 +423,7 @@ func _update_poses() -> void:
 	foe.play(17 if foe.dead else 1)
 
 func _show_outcome() -> void:
+	_end_rhythm_focus()
 	phase = battle.outcome
 	save_checkpoint = _snapshot()
 	rhythm.cancel()
@@ -363,15 +438,15 @@ func _show_outcome() -> void:
 	_new_button("Rhythm Lab / " + shell.key_name("switch_mode"), Rect2(613, 420, 210, 45), _open_lab)
 
 func restart() -> void:
+	_end_rhythm_focus()
 	generation += 1
 	for tween in live_tweens:
 		if tween and tween.is_valid():
 			tween.kill()
 	live_tweens.clear()
 	rhythm.cancel()
-	for node in stage.get_children():
-		if node != foe and node not in heroes:
-			node.queue_free()
+	for node in effects.get_children():
+		node.queue_free()
 	battle.reset()
 	selected_action.clear()
 	selected_target = -1
@@ -412,8 +487,7 @@ func _effect(key: String, point: Vector2) -> void:
 	effect.region_rect = frames[0]
 	effect.position = point
 	effect.scale = Vector2.ONE * (3.5 if key in ["fire", "magic"] else 2.6)
-	effect.z_index = 6
-	stage.add_child(effect)
+	effects.add_child(effect)
 	var tween := create_tween()
 	live_tweens.append(tween)
 	tween.tween_method(func(frame: float): effect.region_rect = frames[mini(frames.size() - 1, int(frame))], 0.0, float(frames.size() - 1), 0.65)
@@ -440,7 +514,7 @@ func _process(delta: float) -> void:
 		if popups[i].life <= 0:
 			popups.remove_at(i)
 	live_tweens = live_tweens.filter(func(tween: Tween): return tween and tween.is_valid())
-	queue_redraw()
+	hud.queue_redraw()
 
 func _unhandled_key_input(event: InputEvent) -> void:
 	if not event is InputEventKey or not event.pressed or event.echo or shell.is_pause_event(event):
@@ -472,13 +546,13 @@ func refresh_bindings() -> void:
 		phase = "select"
 		choose_action(index)
 	rhythm.queue_redraw()
-	queue_redraw()
+	hud.queue_redraw()
 
 func sync_after_pause(_duration_usec: int) -> void:
 	rhythm.held = shell.held_mask(rhythm.instrument)
 
 func _snapshot() -> Dictionary:
-	return {"party": battle.party.duplicate(true), "enemy": battle.enemy.duplicate(true),
+	return {"flow": "execution_rhythm", "party": battle.party.duplicate(true), "enemy": battle.enemy.duplicate(true),
 		"round": battle.round_number, "turn": battle.turn_cursor, "tonics": battle.tonics,
 		"outcome": battle.outcome, "history": history.duplicate(), "resonance": resonance.duplicate(),
 		"queue": battle.queued_actions.duplicate(true) if not battle.resolution_active else [],
@@ -497,7 +571,7 @@ static func valid_save(data: Dictionary) -> bool:
 			return false
 		var hero: Dictionary = data.party[i]
 		for key in template.party[i]:
-			if key == "guard_strength":
+			if key == "guard_strength" or key in Rules.SPEED_FIELDS:
 				continue # Older version-1 saves stored a flat 50% guard.
 			if not hero.has(key):
 				return false
@@ -510,14 +584,21 @@ static func valid_save(data: Dictionary) -> bool:
 		if not _in_range(hero.speed, 1, 999):
 			return false
 	for key in template.enemy:
-		if key == "stagger_turns" and not data.enemy.has(key):
+		if key in Rules.SPEED_FIELDS or (key == "stagger_turns" and not data.enemy.has(key)):
 			continue
 		if not data.enemy.has(key):
 			return false
-		if key not in ["hp", "burn", "burn_turns", "exposed", "exposed_turns", "stagger_turns"] and data.enemy[key] != template.enemy[key]:
+		if key not in ["hp", "burn", "burn_turns", "exposed", "exposed_turns", "stagger_turns", "speed"] and data.enemy[key] != template.enemy[key]:
 			return false
 	if not _in_range(data.enemy.hp, 0, 650) or not _in_range(data.enemy.burn, 0, 100) or not _in_range(data.enemy.burn_turns, 0, 2) or not _in_range(data.enemy.exposed, 0, 1, false) or not _in_range(data.enemy.exposed_turns, 0, 2):
 		return false
+	if not _in_range(data.enemy.get("speed"), 1, 999):
+		return false
+	for entity in data.party + [data.enemy]:
+		for key in Rules.SPEED_FIELDS:
+			var high := 100000 if key.ends_with("_round") else (2 if key.ends_with("_turns") else 999)
+			if not _in_range(entity.get(key, 0), 0, high):
+				return false
 	if not _in_range(data.enemy.get("stagger_turns", 0), 0, 1):
 		return false
 	if not _in_range(data.get("round"), 1, 100000) or not _in_range(data.get("turn"), 0, data.party.size()) or not _in_range(data.get("tonics"), 0, 2) or data.get("outcome") not in ["", "victory", "defeat"]:
@@ -554,7 +635,7 @@ static func _valid_queue(data: Dictionary) -> bool:
 	var reserved_tonics := 0
 	var template = Rules.new()
 	for entry in queue:
-		if not entry is Dictionary or not _in_range(entry.get("actor"), 0, count - 1) or not entry.get("action_id") is String or not _in_range(entry.get("accuracy"), 0, 1, false) or not _in_range(entry.get("target"), -1, count - 1):
+		if not entry is Dictionary or not _in_range(entry.get("actor"), 0, count - 1) or not entry.get("action_id") is String or (entry.has("accuracy") and not _in_range(entry.accuracy, 0, 1, false)) or not _in_range(entry.get("target"), -1, count - 1):
 			return false
 		var actor := int(entry.actor)
 		if seen.has(actor) or data.party[actor].hp <= 0:
@@ -591,6 +672,9 @@ func restore_save(data: Dictionary) -> void:
 	restart()
 	for i in range(data.party.size()):
 		for key in battle.party[i]:
+			if key in Rules.SPEED_FIELDS:
+				battle.party[i][key] = int(data.party[i].get(key, 0))
+				continue
 			if key == "guard_strength":
 				battle.party[i][key] = float(data.party[i].get(key, 0.5 if data.party[i].guard else 0.0))
 				continue
@@ -606,7 +690,7 @@ func restore_save(data: Dictionary) -> void:
 	battle.queued_actions.clear()
 	for entry in data.get("queue", []):
 		battle.queued_actions.append({"actor": int(entry.actor), "action_id": str(entry.action_id),
-			"target": int(entry.target), "accuracy": float(entry.accuracy)})
+			"target": int(entry.target)})
 	battle.spent_actors.clear()
 	if data.has("queue"):
 		for actor in data.get("spent", []):
@@ -633,140 +717,11 @@ func _box(fill: Color, border: Color = Color("57605c")) -> StyleBoxFlat:
 	style.set_corner_radius_all(4)
 	return style
 
-func _text(text: String, point: Vector2, px: int = 18, color: Color = WHITE) -> void:
-	draw_string(font, point, text, HORIZONTAL_ALIGNMENT_LEFT, -1, px, color)
+func _menu_style(fill: Color) -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = fill
+	style.set_corner_radius_all(0)
+	return style
 
-func _bar(bounds: Rect2, ratio: float, color: Color) -> void:
-	draw_rect(bounds, Color("253440"))
-	draw_rect(Rect2(bounds.position, Vector2(bounds.size.x * clampf(ratio, 0, 1), bounds.size.y)), color)
-
-func _draw() -> void:
-	if not font:
-		return
-	# Foreground silhouettes frame the near plane without hiding combatants.
-	for side in [0, 1]:
-		for leaf in range(7):
-			var x: float = side * 1200
-			var direction := 1 if side == 0 else -1
-			var y := 460.0 + leaf * 14
-			draw_colored_polygon(PackedVector2Array([Vector2(x, y + 30), Vector2(x + direction * (70 + leaf * 11), y - 24), Vector2(x + direction * 30, y + 47)]), Color(0.035, 0.10, 0.09, 0.83))
-	draw_rect(Rect2(0, 0, 1200, 82), Color(0.025, 0.045, 0.06, 0.88))
-	draw_line(Vector2(32, 81), Vector2(1168, 81), Color("7c8268"), 1)
-	_text("T H E   H O L L O W   P A S S A G E", Vector2(33, 35), 19, GOLD)
-	_text("WOODLAND SENTINEL  /  RHYTHMPG  /  ESC PAUSE", Vector2(33, 62), 12, MUTED)
-	_text("ROUND %02d" % battle.round_number, Vector2(623, 47), 21)
-	# Enemy identity, HP, statuses, and telegraphed intent stay visible.
-	draw_style_box(_box(Color(0.045, 0.07, 0.09, 0.91)), Rect2(35, 109, 355, 131))
-	_text("THE HOLLOW WARDEN", Vector2(53, 138), 21, GOLD)
-	_text("Sentinel  /  Lv. 4", Vector2(53, 159), 13, MUTED)
-	_bar(Rect2(53, 173, 317, 7), enemy_hp / battle.enemy.max_hp, Color("c28e74"))
-	_text("%d / %d HP" % [battle.enemy.hp, battle.enemy.max_hp], Vector2(53, 204), 15)
-	var statuses := ""
-	if battle.enemy.exposed_turns > 0:
-		statuses += "EXPOSED +%d%%  " % roundi(battle.enemy.exposed * 100)
-	if battle.enemy.burn_turns > 0:
-		statuses += "BURN %d x%d" % [battle.enemy.burn, battle.enemy.burn_turns]
-	if battle.enemy.stagger_turns > 0:
-		statuses += " STAGGERED"
-	_text(statuses if not statuses.is_empty() else "ATK 39   DEF 12   RES 10", Vector2(53, 226), 13, MUTED)
-	var intent: Dictionary = battle.intent()
-	_text("NEXT: " + str(intent.name).to_upper(), Vector2(38, 269), 14, GOLD)
-	_text(intent.description, Vector2(38, 290), 14, WHITE)
-	_draw_action_queue()
-	# Subtle active-character ring establishes foot placement on the ground.
-	if battle.turn_cursor < battle.party.size() and battle.outcome.is_empty():
-		var ground: Vector2 = heroes[battle.turn_cursor].ground
-		draw_set_transform(ground, 0, Vector2(1, 0.27))
-		draw_arc(Vector2.ZERO, 53, 0, TAU, 64, Color(0.92, 0.82, 0.53, 0.8), 3)
-		draw_set_transform(Vector2.ZERO)
-	# Persistent lower HUD; the performance replaces commands in the same space.
-	draw_rect(Rect2(0, 532, 1200, 268), Color("101d28"))
-	draw_line(Vector2(32, 533), Vector2(1168, 533), GOLD, 1)
-	for i in range(battle.party.size()):
-		_draw_hero_card(i)
-	draw_style_box(_box(Color("152530")), Rect2(430, 545, 738, 243))
-	if phase != "rhythm":
-		var actor_name: String = battle.party[mini(battle.turn_cursor, battle.party.size() - 1)].name
-		var heading := "CHOOSE AN ALLY" if phase == "target" else (actor_name.to_upper() + " / PLAN ACTION" if phase == "select" else banner.to_upper())
-		_text(heading, Vector2(447, 574), 18, GOLD)
-		if phase in ["select", "target"]:
-			draw_multiline_string(font, Vector2(447, 755), description, HORIZONTAL_ALIGNMENT_LEFT, 697, 14, 2, MUTED)
-		else:
-			draw_multiline_string(font, Vector2(447, 621), battle.last_event, HORIZONTAL_ALIGNMENT_LEFT, 697, 16, 3, WHITE)
-			_text("RESOLVING PARTY QUEUE" if phase == "resolve" else "ENEMY RESPONSE", Vector2(447, 705), 14, MUTED)
-	# Battlefield action caption and damage numbers are separate from the HUD.
-	if phase in ["rhythm", "resolve", "enemy"]:
-		draw_style_box(_box(Color(0.04, 0.07, 0.1, 0.9)), Rect2(419, 472, 374, 42))
-		_text(banner, Vector2(438, 499), 18, GOLD)
-	for popup in popups:
-		var pos: Vector2 = popup.position
-		var color: Color = popup.color
-		color.a = minf(1, popup.life * 2)
-		var px := 31 if str(popup.text).is_valid_int() else 17
-		var width := font.get_string_size(popup.text, HORIZONTAL_ALIGNMENT_LEFT, -1, px).x
-		draw_string_outline(font, pos - Vector2(width / 2, 0), popup.text, HORIZONTAL_ALIGNMENT_LEFT, -1, px, 5, Color("101c27"))
-		_text(popup.text, pos - Vector2(width / 2, 0), px, color)
-	if phase in ["victory", "defeat"]:
-		_draw_outcome()
-
-func _draw_hero_card(index: int) -> void:
-	var hero: Dictionary = battle.party[index]
-	var y := 547 + index * 80
-	var active: bool = battle.turn_cursor == index and battle.outcome.is_empty()
-	draw_style_box(_box(Color("1b2b35"), GOLD if active else Color("49585b")), Rect2(32, y, 379, 76))
-	_text(str(hero.name).to_upper(), Vector2(49, y + 22), 18, GOLD if active else WHITE)
-	_text("%s / %s" % [hero.job, hero.instrument.capitalize()], Vector2(153, y + 20), 12, MUTED)
-	_bar(Rect2(49, y + 33, 223, 5), hero_hp[index] / hero.max_hp, TEAL if hero.hp > 0 else Color("a26464"))
-	_text("%d / %d HP" % [hero.hp, hero.max_hp], Vector2(283, y + 40), 12)
-	_bar(Rect2(49, y + 48, 223, 3), float(hero.mp) / hero.max_mp, BLUE)
-	_text("%d / %d MP" % [hero.mp, hero.max_mp], Vector2(283, y + 55), 12, BLUE)
-	var status := "FALLEN — tonic to revive" if hero.hp <= 0 else "ATK %d  MAG %d  DEF %d  SPD %d" % [hero.attack, hero.magic, hero.defense, hero.speed]
-	if hero.shield > 0:
-		status = "SHIELD %d  /  " % hero.shield + status
-	if hero.guard:
-		status = "GUARD %d%%  /  SHIELD %d" % [roundi(hero.guard_strength * 100), hero.shield]
-	var queued: Dictionary = battle.queued_for(index)
-	if not queued.is_empty() and phase in ["select", "target", "rhythm"]:
-		status = "QUEUED: %s / %d%%" % [battle.action_for(index, queued.action_id).name, roundi(queued.accuracy * 100)]
-	_text(status, Vector2(49, y + 69), 11, MUTED)
-
-func _draw_action_queue() -> void:
-	var order: Array[int] = battle.speed_order()
-	var step := minf(154, 560.0 / (order.size() + 1))
-	var origin := 1162.0 - step * (order.size() + 1)
-	_text("PARTY QUEUE / FASTEST FIRST" if battle.resolution_active else "PLAN PARTY ACTIONS / SPEED ORDER", Vector2(origin, 111), 12, WHITE)
-	for slot in range(order.size()):
-		var actor: int = order[slot]
-		var hero: Dictionary = battle.party[actor]
-		var entry: Dictionary = battle.queued_for(actor)
-		var active: bool = battle.turn_cursor == actor and battle.outcome.is_empty()
-		var x := origin + slot * step
-		draw_style_box(_box(Color(0.055, 0.085, 0.10, 0.94), GOLD if active else (TEAL if not entry.is_empty() else Color("5b6b63"))), Rect2(x, 122, step - 8, 75))
-		_text(str(hero.name).to_upper(), Vector2(x + 10, 143), 15, GOLD if active else WHITE)
-		_text("SPD %d" % hero.speed, Vector2(x + step - 63, 142), 11, MUTED)
-		var name := "Choose action"
-		var state := "PLANNING" if active else "WAITING"
-		if not entry.is_empty():
-			name = battle.action_for(actor, entry.action_id).name
-			state = "ITEM READY" if entry.action_id == "tonic" else "%d%% / QUEUED" % roundi(entry.accuracy * 100)
-			if battle.resolution_active:
-				state = "ACTING" if active else ("DONE" if battle.resolution_index > slot else "QUEUED")
-		_text(name, Vector2(x + 10, 164), 13)
-		_text(state, Vector2(x + 10, 184), 11, TEAL if not entry.is_empty() else MUTED)
-	var x := origin + order.size() * step
-	draw_style_box(_box(Color(0.055, 0.085, 0.10, 0.94), GOLD if phase == "enemy" else Color("5b6b63")), Rect2(x, 122, step - 8, 75))
-	_text("WARDEN", Vector2(x + 10, 143), 15)
-	_text("Enemy response", Vector2(x + 10, 164), 13, MUTED)
-	_text("AFTER THE PARTY", Vector2(x + 10, 184), 11, MUTED)
-
-func _draw_outcome() -> void:
-	draw_rect(Rect2(0, 83, 1200, 449), Color(0.02, 0.04, 0.06, 0.65))
-	draw_style_box(_box(Color("172a32"), GOLD), Rect2(340, 175, 530, 310))
-	_text("P A S S A G E   O P E N" if phase == "victory" else "T H E   M E L O D Y   F A D E S", Vector2(379, 223), 17, GOLD)
-	_text("VICTORY" if phase == "victory" else "DEFEAT", Vector2(378, 283), 45)
-	var average := 0.0
-	for value in resonance:
-		average += value
-	average /= maxf(1, resonance.size())
-	_text("%d rounds   /   %d%% average accuracy" % [battle.round_number, roundi(average * 100)], Vector2(380, 324), 20, TEAL)
-	draw_multiline_string(font, Vector2(380, 361), "The forest falls quiet. Your trio carries onward." if phase == "victory" else "Guard the telegraphed attacks. Use tonics to revive, and protect your party with Iron Chorus.", HORIZONTAL_ALIGNMENT_LEFT, 450, 16, 2, MUTED)
+func draw_hud() -> void:
+	HUDView.draw(self)

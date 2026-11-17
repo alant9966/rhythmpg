@@ -1,0 +1,8 @@
+[gd_resource type="SystemFont" format=3]
+
+[resource]
+font_names = PackedStringArray("Palatino Linotype", "Georgia", "Noto Serif", "DejaVu Serif")
+font_weight = 400
+multichannel_signed_distance_field = true
+msdf_pixel_range = 16
+msdf_size = 64

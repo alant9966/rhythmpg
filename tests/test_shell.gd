@@ -62,6 +62,8 @@ func run() -> void:
 	check(shell.key_name("piano_1") == "Q", "Binding persists to disk")
 	shell._install_actions()
 	scene.choose_action(1)
+	scene.choose_action(0)
+	scene.choose_action(0)
 	check(scene.rhythm.preparation_left > 0 and not scene.rhythm.player.playing, "Combat prepares before playing audio")
 	scene.rhythm._input(key(KEY_D))
 	scene.rhythm._input(key(KEY_F))
@@ -81,7 +83,7 @@ func run() -> void:
 	check(is_equal_approx(scene.rhythm.time, song) and scene.rhythm.player.stream_paused, "Pause freezes active rhythm clock and audio")
 	check(shell.save_slot(1) == "Saved in slot 1.", "Create combat save slot")
 	var saved := shell.read_slot(1)
-	check(saved.payload.enemy.hp == 650 and saved.payload.turn == 0, "Mid-action save uses command checkpoint")
+	check(saved.payload.enemy.hp == 650 and saved.payload.turn == 2, "Mid-action save uses command checkpoint")
 	check(scene.valid_save(saved.payload), "Serialized combat snapshot validates")
 	var invalid: Dictionary = saved.payload.duplicate(true)
 	invalid.party[0].hp = -1

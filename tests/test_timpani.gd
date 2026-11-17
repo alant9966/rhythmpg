@@ -1,4 +1,5 @@
 extends SceneTree
+const Helpers = preload("res://tests/combat_test_helpers.gd")
 const Rules = preload("res://combat/battle_state.gd")
 const Maps = preload("res://combat/combat_beatmaps.gd")
 const Rhythm = preload("res://combat/combat_rhythm.gd")
@@ -104,15 +105,14 @@ func run() -> void:
 	await settle_scene()
 	check(scene.heroes.size() == 3 and scene.heroes[2].has_timpani, "Maro sprite and drums are staged")
 	scene.choose_action(0)
-	finish_as(scene, 0)
 	scene.choose_action(0)
-	finish_as(scene, 0)
-	check(scene.phase == "select" and scene.battle.turn_cursor == 2 and scene.battle.queued_actions.size() == 2 and scene.battle.enemy.hp == 650, "First two selections wait for Maro")
+	check(scene.phase == "select" and scene.battle.turn_cursor == 2 and scene.battle.queued_actions.size() == 2 and scene.battle.enemy.hp == 650, "First two selections wait for Maro without rhythm")
 	var saved: Dictionary = JSON.parse_string(JSON.stringify(scene.make_save()))
 	check(scene.valid_save(saved), "Serialized three-member queue can be saved while Maro plans")
 	scene.restore_save(saved)
 	check(scene.battle.turn_cursor == 2 and scene.battle.queued_actions.size() == 2, "Three-member queue restores its third planning slot")
 	scene.choose_action(1)
+	await reach_maro(scene)
 	check(scene.phase == "rhythm" and scene.rhythm.instrument == "timpani" and scene.rhythm.samples.size() == 4, "Maro launches CircleStrike with drum audio")
 	scene.rhythm.preparation_left = 0
 	var first: Dictionary = scene.rhythm.session.notes[0]
@@ -128,22 +128,21 @@ func run() -> void:
 	scene.rhythm.time = Rhythm.END
 	scene.rhythm._process(0)
 	await wait_for_round(scene, 2)
-	check(scene.history.size() == 4 and scene.history[2].begins_with("Thunder Roll") and scene.history[3].contains("staggered"), "Third queued action resolves then skips enemy response")
-	check(scene.battle.enemy.hp == 534 and scene.battle.party[2].mp == 22 and scene.battle.party[0].hp == 180, "Timpani resolution applies damage and round costs once")
+	check(scene.history.size() == 4 and scene.history[3].begins_with("Thunder Roll") and scene.battle.enemy.stagger_turns == 1, "Third action resolves after enemy and stores stagger for its next response")
+	check(scene.battle.enemy.hp == 534 and scene.battle.party[2].mp == 22 and scene.battle.party[0].hp == 155, "Timpani resolution applies damage and round costs once")
 	scene.restart()
 	scene.battle.party[2].hp = 70
 	scene.choose_action(0)
-	finish_as(scene, 0)
 	scene.choose_action(2)
 	var key := InputEventKey.new()
 	key.physical_keycode = int(shell.bindings.command_3)
 	key.pressed = true
 	scene._unhandled_key_input(key)
-	check(scene.phase == "rhythm" and scene.selected_target == 2, "Third ally is keyboard-targetable")
-	finish_as(scene, 1)
+	check(scene.phase == "select" and scene.battle.turn_cursor == 2 and scene.battle.queued_for(1).target == 2, "Third ally is keyboard-targetable")
 	scene.choose_action(3)
+	await reach_maro(scene, true)
 	check(scene.rhythm.instrument == "timpani", "Guard launches CircleStrike too")
-	finish_as(scene, 1)
+	Helpers.perfect(scene.rhythm)
 	await wait_for_round(scene, 2)
 	check(scene.battle.party[2].hp == 148 and scene.battle.party[2].guard_strength == 1.0, "Maro receives a queued heal and earns a perfect guard")
 	var legacy: Dictionary = scene.make_save()
@@ -197,3 +196,18 @@ func run() -> void:
 	await create_timer(0.1).timeout
 	print("Timpani checks: %d passed, %d failed" % [checks - failures, failures])
 	quit(1 if failures else 0)
+
+func reach_maro(scene: Node, heal: bool = false) -> void:
+	for tick in range(450):
+		if scene.phase == "rhythm":
+			if scene.battle.turn_cursor == 2:
+				if scene.rhythm.gameplay_revealed:
+					return
+				await create_timer(0.02).timeout
+				continue
+			if heal and scene.battle.turn_cursor == 1:
+				Helpers.perfect(scene.rhythm)
+			else:
+				scene.rhythm.resolve_now()
+		await create_timer(0.02).timeout
+	check(false, "Maro did not reach execution performance")

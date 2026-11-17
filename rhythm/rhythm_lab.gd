@@ -50,8 +50,17 @@ var performance_end_time := 0.0
 var preparation_left := 0.0
 var mode_button: Button
 
+func _fit_canvas() -> void:
+	var available := get_viewport_rect().size
+	var zoom := minf(available.x / size.x, available.y / size.y)
+	scale = Vector2.ONE * zoom
+	position = (available - size * zoom) * 0.5
+
 func _ready() -> void:
-	font = ThemeDB.fallback_font
+	_fit_canvas()
+	get_viewport().size_changed.connect(_fit_canvas)
+	texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+	font = preload("res://ui/clear_font.tres")
 	music = AudioStreamPlayer.new()
 	add_child(music)
 	music.finished.connect(func(): audio_ended_at = Time.get_ticks_usec())
@@ -281,12 +290,12 @@ func _text(value: String, position: Vector2, size_px: int = 20, color: Color = I
 	draw_string(font, position, value, HORIZONTAL_ALIGNMENT_LEFT, -1, size_px, color)
 
 func _draw() -> void:
-	draw_rect(Rect2(Vector2.ZERO, size), Color("101d28"))
+	draw_rect(Rect2(Vector2.ZERO, size), Color("191a17"))
 	draw_texture_rect(BACKGROUND, Rect2(0, -42, maxf(1200, size.x), maxf(800, size.y)), false)
-	draw_rect(Rect2(Vector2.ZERO, size), Color(0.025, 0.045, 0.06, 0.91))
-	draw_rect(Rect2(0, 0, size.x, 92), Color(0.025, 0.045, 0.06, 0.85))
-	_text("R H Y T H M P G   /   P R A C T I C E", Vector2(52, 33), 14, Style.GOLD)
-	_text("Rhythm Lab", Vector2(50, 73), 32)
+	draw_rect(Rect2(Vector2.ZERO, size), Color(0.065, 0.065, 0.055, 0.91))
+	draw_rect(Rect2(0, 0, size.x, 92), Color(0.065, 0.065, 0.055, 0.85))
+	_text("Practice", Vector2(52, 33), 14, Style.GOLD)
+	draw_string(preload("res://ui/display_font.tres"), Vector2(50, 73), "Rhythm Lab", HORIZONTAL_ALIGNMENT_LEFT, -1, 34, INK)
 	draw_line(Vector2(52, 91), Vector2(1148, 91), Style.GOLD, 1)
 	_text("PRACTICE MODE", Vector2(574, 142), 13, MUTED)
 	_text("CIRCLESTRIKE / TIMPANI" if instrument == "timpani" else ("CHORDFALL / PIANO" if instrument == "piano" else "STRUMLINE / GUITAR"), Vector2(52, 184), 14, Style.GOLD)
@@ -308,7 +317,7 @@ func _draw() -> void:
 		if instrument == "guitar":
 			StrumVisuals.fret(self, Rect2(x + 3, TOP_Y + 4, lane_width - 6, HIT_Y - TOP_Y + 52), (required_mask & (1 << lane)) != 0, pressed)
 		else:
-			draw_rect(Rect2(x + 3, TOP_Y + 4, lane_width - 6, HIT_Y - TOP_Y + 52), Color("1c293a"))
+			draw_rect(Rect2(x + 3, TOP_Y + 4, lane_width - 6, HIT_Y - TOP_Y + 52), Color("242821"))
 		if instrument == "guitar":
 			draw_line(Vector2(x + lane_width / 2, TOP_Y), Vector2(x + lane_width / 2, HIT_Y), Color("927752"), 2)
 		if instrument == "piano":
@@ -370,7 +379,7 @@ func _draw() -> void:
 func _draw_timpani_lab() -> void:
 	_text("Left-click each numbered circle when its shrinking ring meets the target edge.", Vector2(52, 214), 17)
 	draw_style_box(_panel(), Rect2(52, TOP_Y, 1096, 470))
-	draw_style_box(Style.panel(Color("101d28")), Rect2(276, 241, 676, 448))
+	draw_style_box(Style.panel(Color("191a17")), Rect2(276, 241, 676, 448))
 	_text("COMBO", Vector2(82, 280), 14, MUTED)
 	_text(str(session.combo), Vector2(82, 323), 36)
 	_text("ACCURACY", Vector2(82, 372), 14, MUTED)
@@ -463,7 +472,7 @@ func restore_save(data: Dictionary) -> void:
 		_select(data.instrument)
 
 func _panel() -> StyleBoxFlat:
-	return Style.panel(Color("152530"))
+	return Style.panel(Color("20211c"))
 
 func _note_style(color: Color) -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()

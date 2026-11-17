@@ -3,6 +3,7 @@ const Shell = preload("res://global/game_shell.gd")
 @onready var shell: Shell = get_node("/root/GameShell")
 ## Compact battle performance, reusing the standalone scoring engine.
 signal completed(result: Dictionary)
+@export_range(0.0, 1.0, 0.01) var dim_opacity := 0.78
 const Session = preload("res://rhythm/rhythm_session.gd")
 const Beatmaps = preload("res://combat/combat_beatmaps.gd")
 const RhythmView = preload("res://combat/combat_rhythm_view.gd")
@@ -13,6 +14,9 @@ const LEAD := 0.65
 const END := LEAD + 4 * BEAT
 const EMPTY_RUNWAY_SECONDS := 2.0
 const COLORS := [Color("88dbd3"), Color("abc7ff"), Color("d3b0ec"), Color("f5cf85")]
+var gameplay_revealed := true
+var presentation_weight := 1.0
+var presentation_outro := false
 var session = Session.new()
 var instrument := "guitar"
 var active := false
@@ -37,7 +41,7 @@ var variation_bags: Dictionary = {}
 var last_variation: Dictionary = {}
 
 func _ready() -> void:
-	font = ThemeDB.fallback_font
+	font = preload("res://ui/clear_font.tres")
 	rng.randomize()
 	player = AudioStreamPlayer.new()
 	add_child(player)
@@ -97,6 +101,7 @@ func start(mode: String, action_name: String, mask: int = 3, perfect_bonus: Stri
 	queue_redraw()
 
 func cancel() -> void:
+	presentation_outro = false
 	active = false
 	paused = false
 	preparation_left = 0.0
@@ -105,6 +110,32 @@ func cancel() -> void:
 	for voice in voices:
 		voice.stop()
 	hide()
+
+func reveal_gameplay() -> void:
+	gameplay_revealed = true
+	if active and preparation_left <= 0 and not player.playing:
+		player.play()
+	queue_redraw()
+
+func gameplay_visible() -> bool:
+	return active and gameplay_revealed and not presentation_outro
+
+func begin_outro() -> void:
+	presentation_outro = true
+	show()
+	queue_redraw()
+
+func end_outro() -> void:
+	gameplay_revealed = true
+	presentation_outro = false
+	presentation_weight = 1.0
+	hide()
+	queue_redraw()
+
+func dimmer_rect() -> Rect2:
+	# The fitted combat canvas may be centered inside a wider viewport.
+	# Cover the entire viewport, including negative local/letterbox coordinates.
+	return (get_global_transform_with_canvas().affine_inverse() * get_viewport_rect()).grow(2.0)
 
 func resolve_now() -> void:
 	if not active:
@@ -118,7 +149,14 @@ func _clock() -> float:
 	return maxf(time, player.get_playback_position() + AudioServer.get_time_since_last_mix() - AudioServer.get_output_latency())
 
 func _process(delta: float) -> void:
+	if presentation_outro:
+		queue_redraw()
+		return
 	if not active or paused:
+		return
+	if not gameplay_revealed:
+		preparation_left = maxf(0, preparation_left - delta)
+		queue_redraw()
 		return
 	if preparation_left > 0:
 		preparation_left = maxf(0, preparation_left - delta)
@@ -156,7 +194,7 @@ func _input(event: InputEvent) -> void:
 	if event.pressed and shell.matches(event, "back"):
 		resolve_now()
 		return
-	if paused or preparation_left > 0:
+	if not gameplay_revealed or paused or preparation_left > 0:
 		return
 	var now := _clock() - offset_ms / 1000.0
 	session.advance(now, held)
@@ -172,7 +210,7 @@ func _input(event: InputEvent) -> void:
 					_sound(fret)
 
 func click_circle(point: Vector2) -> bool:
-	if not active or instrument != "timpani" or preparation_left > 0 or paused or shell.is_open or not Circles.COMBAT_AREA.has_point(point):
+	if not gameplay_revealed or not active or instrument != "timpani" or preparation_left > 0 or paused or shell.is_open or not Circles.COMBAT_AREA.has_point(point):
 		return false
 	var now := _clock() - offset_ms / 1000.0
 	if now < LEAD - Session.GOOD_WINDOW:

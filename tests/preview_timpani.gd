@@ -1,4 +1,5 @@
 extends SceneTree
+const Helpers = preload("res://tests/combat_test_helpers.gd")
 
 func _initialize() -> void:
 	call_deferred("run")
@@ -17,9 +18,14 @@ func run() -> void:
 	await shot("party")
 	for i in range(2):
 		scene.choose_action(0)
-		scene.rhythm.resolve_now()
 	scene.rhythm.rng.seed = 19
 	scene.choose_action(1)
+	for tick in range(300):
+		if scene.phase == "rhythm":
+			if scene.battle.turn_cursor == 2:
+				break
+			Helpers.perfect(scene.rhythm)
+		await create_timer(0.02).timeout
 	scene.rhythm.preparation_left = 0
 	scene.rhythm.paused = true
 	scene.rhythm.time = 0.5

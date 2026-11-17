@@ -1,7 +1,7 @@
 extends RefCounted
 const APPROACH := 0.9
 const RADIUS := 40.0
-const COMBAT_AREA := Rect2(350, 254, 750, 346)
+const COMBAT_AREA := Rect2(135, 215, 590, 330)
 const PRACTICE_AREA := Rect2(298, 250, 632, 400)
 
 static func logical_point(local: Vector2, size: Vector2) -> Vector2:

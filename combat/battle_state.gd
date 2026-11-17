@@ -12,6 +12,7 @@ var queued_actions: Array[Dictionary] = []
 var resolution_queue: Array[Dictionary] = []
 var resolution_index := 0
 var resolution_active := false
+const SPEED_FIELDS := ["haste", "haste_turns", "haste_round", "slow", "slow_turns", "slow_round"]
 var spent_actors: Array[int] = [] # Migration of saves made after an old-style turn.
 
 func _init() -> void:
@@ -27,8 +28,11 @@ func reset() -> void:
 			"mp": 28, "max_mp": 28, "attack": 28, "magic": 14, "defense": 12, "speed": 10, "shield": 0, "guard": false, "guard_strength": 0.0},
 	]
 	enemy = {"name": "The Hollow Warden", "hp": 650, "max_hp": 650, "attack": 39,
-		"defense": 12, "resist": 10, "speed": 10, "burn": 0, "burn_turns": 0,
+		"defense": 12, "resist": 10, "speed": 13, "burn": 0, "burn_turns": 0,
 		"exposed": 0.0, "exposed_turns": 0, "stagger_turns": 0}
+	for entity in party + [enemy]:
+		for key in SPEED_FIELDS:
+			entity[key] = 0
 	round_number = 1
 	turn_cursor = 0
 	tonics = 2
@@ -47,7 +51,7 @@ func actions(actor: int) -> Array[Dictionary]:
 			{"id": "attack", "name": "Downstroke", "cost": 0, "target": "enemy", "power": 24,
 				"perfect": "CRITICAL x1.5", "description": "Up to 72 damage, scaled by accuracy. Perfect: critical strike for 108 damage. 0% misses."},
 			{"id": "rend", "name": "Rending Riff", "cost": 6, "target": "enemy", "power": 44,
-				"perfect": "EXPOSE +25% / 2 TURNS", "description": "Up to 112 damage, scaled by accuracy. Perfect: expose the foe (+25% damage, 2 enemy turns)."},
+				"perfect": "EXPOSE +25% / 2 TURNS", "description": "Up to 112 damage and up to -4 enemy SPD for 2 rounds, scaled by accuracy. Perfect: expose the foe (+25% damage, 2 enemy turns)."},
 			{"id": "shield", "name": "Iron Chorus", "cost": 4, "target": "party", "power": 14,
 				"perfect": "SHIELD x1.5", "description": "Up to 34 shield HP per ally, scaled by accuracy. Perfect: 51 shield HP. 0% fails."},
 		]
@@ -67,7 +71,7 @@ func actions(actor: int) -> Array[Dictionary]:
 			{"id": "thunder", "name": "Thunder Roll", "cost": 8, "target": "enemy", "power": 42,
 				"perfect": "STAGGER / SKIP ENEMY RESPONSE", "description": "Up to 116 damage, scaled by accuracy. Perfect: stagger the enemy, skipping its next response."},
 			{"id": "rally", "name": "Rallying Beat", "cost": 6, "target": "party", "power": 4,
-				"perfect": "PARTY HEAL 20 HP", "description": "Restore up to 4 MP to every living ally, scaled by accuracy. Perfect: also restore 20 HP each."},
+				"perfect": "PARTY HEAL 20 HP", "description": "Restore up to 4 MP and grant up to +4 SPD for 2 rounds to every living ally, scaled by accuracy. Perfect: also restore 20 HP each."},
 		]
 	result.append({"id": "guard", "name": "Guard / Recover", "cost": 0, "target": "self", "power": 0,
 		"perfect": "FULL BLOCK / +4 BONUS MP", "description": "Play your instrument: up to 75% next-hit reduction and 4 MP, scaled by accuracy. Perfect: full block and 8 MP."})
@@ -106,33 +110,41 @@ func next_planner() -> int:
 			return actor
 	return -1
 
-func queue_action(actor: int, action: Dictionary, target: int, accuracy: float) -> bool:
+func queue_action(actor: int, action: Dictionary, target: int, accuracy: float = -1.0) -> bool:
 	if not can_plan(actor, action) or action_for(actor, action.id).is_empty():
 		return false
 	if action.target == "ally" and (target < 0 or target >= party.size() or (action.id == "heal" and party[target].hp <= 0)):
 		return false
-	queued_actions.append({"actor": actor, "action_id": action.id, "target": target,
-		"accuracy": clampf(accuracy, 0, 1)})
+	# Scores are earned at execution. Optional scores support standalone rules callers.
+	var entry := {"actor": actor, "action_id": action.id, "target": target}
+	if accuracy >= 0:
+		entry.accuracy = clampf(accuracy, 0, 1)
+	queued_actions.append(entry)
 	var next := next_planner()
 	if next >= 0:
 		turn_cursor = next
 	return true
+
+func effective_speed(actor: int) -> int:
+	var entity: Dictionary = enemy if actor == party.size() else party[actor]
+	return maxi(1, int(entity.speed) + int(entity.get("haste", 0)) - int(entity.get("slow", 0)))
 
 func speed_order() -> Array[int]:
 	var order: Array[int] = []
 	for actor in range(party.size()):
 		if party[actor].hp > 0 and actor not in spent_actors:
 			order.append(actor)
+	if enemy.hp > 0:
+		order.append(party.size())
 	order.sort_custom(func(a: int, b: int):
-		return a < b if party[a].speed == party[b].speed else party[a].speed > party[b].speed)
+		return a < b if effective_speed(a) == effective_speed(b) else effective_speed(a) > effective_speed(b))
 	return order
 
 func begin_resolution() -> bool:
 	if resolution_active or not outcome.is_empty() or next_planner() >= 0 or queued_actions.is_empty():
 		return false
 	resolution_queue = queued_actions.duplicate(true)
-	resolution_queue.sort_custom(func(a: Dictionary, b: Dictionary):
-		return a.actor < b.actor if party[a.actor].speed == party[b.actor].speed else party[a.actor].speed > party[b.actor].speed)
+	resolution_queue.append({"actor": party.size(), "action_id": "enemy", "target": -1})
 	resolution_index = 0
 	resolution_active = true
 	return true
@@ -141,15 +153,35 @@ func take_next_action() -> Dictionary:
 	_check_outcome()
 	if not resolution_active or not outcome.is_empty():
 		return {}
+	# Reorder only the unacted suffix. Haste/slow cannot grant extra actions.
+	var pending: Array[Dictionary] = []
+	for index in range(resolution_index, resolution_queue.size()):
+		pending.append(resolution_queue[index])
+	pending.sort_custom(func(a: Dictionary, b: Dictionary):
+		return a.actor < b.actor if effective_speed(a.actor) == effective_speed(b.actor) else effective_speed(a.actor) > effective_speed(b.actor))
+	for index in range(pending.size()):
+		resolution_queue[resolution_index + index] = pending[index]
 	while resolution_index < resolution_queue.size():
 		var entry: Dictionary = resolution_queue[resolution_index]
 		resolution_index += 1
-		if party[entry.actor].hp <= 0:
+		if entry.actor < party.size() and party[entry.actor].hp <= 0:
 			continue
 		turn_cursor = int(entry.actor)
 		return entry.duplicate(true)
-	turn_cursor = party.size()
 	return {}
+
+func change_speed(entity: Dictionary, kind: String, amount: int) -> void:
+	entity[kind] = maxi(int(entity.get(kind, 0)), amount)
+	entity[kind + "_turns"] = 2
+	entity[kind + "_round"] = round_number
+
+func _tick_speed() -> void:
+	for entity in party + [enemy]:
+		for kind in ["haste", "slow"]:
+			if int(entity.get(kind + "_turns", 0)) > 0 and int(entity.get(kind + "_round", 0)) < round_number:
+				entity[kind + "_turns"] -= 1
+				if entity[kind + "_turns"] == 0:
+					entity[kind] = 0
 
 func finish_round() -> void:
 	_check_outcome()
@@ -160,6 +192,7 @@ func finish_round() -> void:
 	resolution_index = 0
 	resolution_active = false
 	spent_actors.clear()
+	_tick_speed()
 	round_number += 1
 	for hero in party:
 		if hero.hp > 0:
@@ -170,7 +203,7 @@ func intent() -> Dictionary:
 	if enemy.stagger_turns > 0:
 		return {"name": "Staggered", "target": -1, "description": "The Warden will skip its response."}
 	if round_number % 3 == 0:
-		return {"name": "Dissonant Wave", "target": -1, "description": "A wave will strike the entire party."}
+		return {"name": "Dissonant Wave", "target": -1, "description": "A wave will strike the party and inflict -3 SPD for 2 rounds."}
 	var cleave := round_number - 1 - floori((round_number - 1) / 3.0)
 	var target := cleave % party.size()
 	for offset in range(party.size()):
@@ -227,15 +260,18 @@ func apply_player(actor: int, action: Dictionary, target: int, accuracy: float) 
 			for hero in party:
 				if hero.hp > 0:
 					hero.mp = mini(hero.max_mp, hero.mp + event.amount)
+					change_speed(hero, "haste", maxi(1, roundi(4 * a)))
 					if perfect:
 						hero.hp = mini(hero.max_hp, hero.hp + 20)
-			last_event = "Rallying Beat restores up to %d MP to every living ally." % event.amount
+			last_event = "Rallying Beat restores up to %d MP and grants +%d SPD to every living ally." % [event.amount, maxi(1, roundi(4 * a))]
 		_:
 			var stat: int = party[actor].magic if actor == 1 else party[actor].attack
 			var defense: int = enemy.resist if actor == 1 else enemy.defense
 			var critical := 1.5 if perfect and action.id == "attack" else 1.0
 			event.amount = maxi(1, roundi(maxi(1, action.power + stat - defense) * 2.0 * a * critical * (1.0 + float(enemy.exposed))))
 			enemy.hp = maxi(0, enemy.hp - event.amount)
+			if action.id == "rend":
+				change_speed(enemy, "slow", maxi(1, roundi(4 * a)))
 			if perfect and action.id == "rend":
 				enemy.exposed = 0.25
 				enemy.exposed_turns = 2
@@ -284,6 +320,8 @@ func apply_enemy() -> Dictionary:
 		hero.shield -= absorbed
 		damage -= absorbed
 		hero.hp = maxi(0, hero.hp - damage)
+		if next.target == -1 and hero.hp > 0:
+			change_speed(hero, "slow", 3)
 		event.hits.append({"target": target, "amount": damage, "absorbed": absorbed})
 	_tick_expose()
 	last_event = str(next.name) + " crashes through the clearing."

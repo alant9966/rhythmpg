@@ -2,17 +2,272 @@
 
 [ext_resource type="Texture2D" uid="uid://cf8j6a0wr578h" path="res://assets/characters/warrior.png" id="1_lsxm8"]
 
+[ext_resource type="Script" path="res://combat/battle_actor.gd" id="2_actor"]
+
+[sub_resource type="Animation" id="Animation_lsxm8"]
+length = 0.001
+tracks/0/type = "value"
+tracks/0/imported = false
+tracks/0/enabled = true
+tracks/0/path = NodePath("Sprite:frame")
+tracks/0/interp = 1
+tracks/0/loop_wrap = true
+tracks/0/keys = {
+"times": PackedFloat32Array(0),
+"transitions": PackedFloat32Array(1),
+"update": 1,
+"values": [9]
+}
+
+[sub_resource type="Animation" id="Animation_oq6ko"]
+resource_name = "idle"
+length = 0.96
+loop_mode = 1
+tracks/0/type = "value"
+tracks/0/path = NodePath("Sprite:frame")
+tracks/0/interp = 0
+tracks/0/keys = {
+"times": PackedFloat32Array(0),
+"transitions": PackedFloat32Array(1),
+"update": 1,
+"values": [9]
+}
+
+[sub_resource type="Animation" id="Animation_enemy_idle"]
+resource_name = "enemy_idle"
+length = 0.96
+loop_mode = 1
+tracks/0/type = "value"
+tracks/0/path = NodePath("Sprite:frame")
+tracks/0/interp = 0
+tracks/0/keys = {
+"times": PackedFloat32Array(0, 0.24, 0.48, 0.72),
+"transitions": PackedFloat32Array(1, 1, 1, 1),
+"update": 1,
+"values": [0, 1, 2, 1]
+}
+
+[sub_resource type="Animation" id="Animation_chant"]
+resource_name = "chant"
+length = 0.6
+loop_mode = 1
+tracks/0/type = "value"
+tracks/0/path = NodePath("Sprite:frame")
+tracks/0/interp = 0
+tracks/0/keys = {
+"times": PackedFloat32Array(0, 0.2, 0.4),
+"transitions": PackedFloat32Array(1, 1, 1),
+"update": 1,
+"values": [18, 19, 20]
+}
+
+[sub_resource type="Animation" id="Animation_guard"]
+resource_name = "guard"
+length = 0.6
+loop_mode = 1
+tracks/0/type = "value"
+tracks/0/path = NodePath("Sprite:frame")
+tracks/0/interp = 0
+tracks/0/keys = {
+"times": PackedFloat32Array(0, 0.2, 0.4),
+"transitions": PackedFloat32Array(1, 1, 1),
+"update": 1,
+"values": [27, 28, 29]
+}
+
+[sub_resource type="Animation" id="Animation_hurt"]
+resource_name = "hurt"
+length = 0.375
+loop_mode = 0
+tracks/0/type = "value"
+tracks/0/path = NodePath("Sprite:frame")
+tracks/0/interp = 0
+tracks/0/keys = {
+"times": PackedFloat32Array(0, 0.125, 0.25),
+"transitions": PackedFloat32Array(1, 1, 1),
+"update": 1,
+"values": [36, 37, 38]
+}
+
+[sub_resource type="Animation" id="Animation_attack"]
+resource_name = "attack"
+length = 0.375
+loop_mode = 0
+tracks/0/type = "value"
+tracks/0/path = NodePath("Sprite:frame")
+tracks/0/interp = 0
+tracks/0/keys = {
+"times": PackedFloat32Array(0, 0.125, 0.25),
+"transitions": PackedFloat32Array(1, 1, 1),
+"update": 1,
+"values": [12, 13, 14]
+}
+
+[sub_resource type="Animation" id="Animation_drum"]
+resource_name = "drum"
+length = 0.6
+loop_mode = 1
+tracks/0/type = "value"
+tracks/0/path = NodePath("Sprite:frame")
+tracks/0/interp = 0
+tracks/0/keys = {
+"times": PackedFloat32Array(0, 0.2, 0.4),
+"transitions": PackedFloat32Array(1, 1, 1),
+"update": 1,
+"values": [30, 31, 32]
+}
+
+[sub_resource type="Animation" id="Animation_cast"]
+resource_name = "cast"
+length = 0.375
+loop_mode = 0
+tracks/0/type = "value"
+tracks/0/path = NodePath("Sprite:frame")
+tracks/0/interp = 0
+tracks/0/keys = {
+"times": PackedFloat32Array(0, 0.125, 0.25),
+"transitions": PackedFloat32Array(1, 1, 1),
+"update": 1,
+"values": [39, 40, 41]
+}
+
+[sub_resource type="Animation" id="Animation_victory"]
+resource_name = "victory"
+length = 0.6
+loop_mode = 1
+tracks/0/type = "value"
+tracks/0/path = NodePath("Sprite:frame")
+tracks/0/interp = 0
+tracks/0/keys = {
+"times": PackedFloat32Array(0, 0.2, 0.4),
+"transitions": PackedFloat32Array(1, 1, 1),
+"update": 1,
+"values": [15, 16, 17]
+}
+
+[sub_resource type="Animation" id="Animation_defeat"]
+resource_name = "defeat"
+length = 0.375
+loop_mode = 0
+tracks/0/type = "value"
+tracks/0/path = NodePath("Sprite:frame")
+tracks/0/interp = 0
+tracks/0/keys = {
+"times": PackedFloat32Array(0, 0.125, 0.25),
+"transitions": PackedFloat32Array(1, 1, 1),
+"update": 1,
+"values": [51, 52, 53]
+}
+
+[sub_resource type="AnimationLibrary" id="AnimationLibrary_05i8d"]
+_data = {
+&"RESET": SubResource("Animation_lsxm8"),
+&"idle": SubResource("Animation_oq6ko"),
+&"enemy_idle": SubResource("Animation_enemy_idle"),
+&"chant": SubResource("Animation_chant"),
+&"guard": SubResource("Animation_guard"),
+&"hurt": SubResource("Animation_hurt"),
+&"attack": SubResource("Animation_attack"),
+&"drum": SubResource("Animation_drum"),
+&"cast": SubResource("Animation_cast"),
+&"victory": SubResource("Animation_victory"),
+&"defeat": SubResource("Animation_defeat")
+}
+
 [node name="BattleActor" type="Node2D" unique_id=336087547]
 texture_filter = 1
+script = ExtResource("2_actor")
 
 [node name="Shadow" type="Polygon2D" parent="." unique_id=2068168718]
+z_index = -2
+position = Vector2(0, -2)
+scale = Vector2(12.48, 3.494)
+color = Color(0.019607844, 0.03137255, 0.039215688, 0.47843137)
+antialiased = true
+polygon = PackedVector2Array(1, 0, 0.924, 0.383, 0.707, 0.707, 0.383, 0.924, 0, 1, -0.383, 0.924, -0.707, 0.707, -0.924, 0.383, -1, 0, -0.924, -0.383, -0.707, -0.707, -0.383, -0.924, 0, -1, 0.383, -0.924, 0.707, -0.707, 0.924, -0.383)
 
 [node name="Sprite" type="Sprite2D" parent="." unique_id=1379925399]
-position = Vector2(-1, -24)
+position = Vector2(0, -24)
 texture = ExtResource("1_lsxm8")
+hframes = 9
+vframes = 6
+frame = 9
 
 [node name="TimpaniProps" type="Node2D" parent="." unique_id=337982841]
+visible = false
+z_index = -1
+
+[node name="LeftDrum" type="Node2D" parent="TimpaniProps"]
+position = Vector2(-19, 0)
+
+[node name="LeftLeg" type="Line2D" parent="TimpaniProps/LeftDrum"]
+points = PackedVector2Array(-5, -5, -6, 2)
+width = 2.0
+default_color = Color(0.22, 0.17, 0.18, 1)
+
+[node name="RightLeg" type="Line2D" parent="TimpaniProps/LeftDrum"]
+points = PackedVector2Array(5, -5, 6, 2)
+width = 2.0
+default_color = Color(0.22, 0.17, 0.18, 1)
+
+[node name="Bowl" type="Polygon2D" parent="TimpaniProps/LeftDrum"]
+polygon = PackedVector2Array(-9, -12, 9, -12, 6, -5, -6, -5)
+color = Color(0.643, 0.404, 0.275, 1)
+
+[node name="Highlight" type="Line2D" parent="TimpaniProps/LeftDrum"]
+points = PackedVector2Array(-5, -10, -3, -6)
+width = 1.0
+default_color = Color(0.843, 0.639, 0.416, 1)
+
+[node name="HeadRim" type="Polygon2D" parent="TimpaniProps/LeftDrum"]
+position = Vector2(0, -12)
+scale = Vector2(9, 3.15)
+polygon = PackedVector2Array(1.000000, 0.000000, 0.923880, 0.382683, 0.707107, 0.707107, 0.382683, 0.923880, 0.000000, 1.000000, -0.382683, 0.923880, -0.707107, 0.707107, -0.923880, 0.382683, -1.000000, 0.000000, -0.923880, -0.382683, -0.707107, -0.707107, -0.382683, -0.923880, -0.000000, -1.000000, 0.382683, -0.923880, 0.707107, -0.707107, 0.923880, -0.382683)
+color = Color(0.294, 0.224, 0.208, 1)
+
+[node name="HeadSkin" type="Polygon2D" parent="TimpaniProps/LeftDrum"]
+position = Vector2(0, -12)
+scale = Vector2(7.5, 2.625)
+polygon = PackedVector2Array(1.000000, 0.000000, 0.923880, 0.382683, 0.707107, 0.707107, 0.382683, 0.923880, 0.000000, 1.000000, -0.382683, 0.923880, -0.707107, 0.707107, -0.923880, 0.382683, -1.000000, 0.000000, -0.923880, -0.382683, -0.707107, -0.707107, -0.382683, -0.923880, -0.000000, -1.000000, 0.382683, -0.923880, 0.707107, -0.707107, 0.923880, -0.382683)
+color = Color(0.886, 0.776, 0.604, 1)
+
+[node name="RightDrum" type="Node2D" parent="TimpaniProps"]
+position = Vector2(13, 0)
+
+[node name="LeftLeg" type="Line2D" parent="TimpaniProps/RightDrum"]
+points = PackedVector2Array(-5, -5, -6, 2)
+width = 2.0
+default_color = Color(0.22, 0.17, 0.18, 1)
+
+[node name="RightLeg" type="Line2D" parent="TimpaniProps/RightDrum"]
+points = PackedVector2Array(5, -5, 6, 2)
+width = 2.0
+default_color = Color(0.22, 0.17, 0.18, 1)
+
+[node name="Bowl" type="Polygon2D" parent="TimpaniProps/RightDrum"]
+polygon = PackedVector2Array(-9, -12, 9, -12, 6, -5, -6, -5)
+color = Color(0.643, 0.404, 0.275, 1)
+
+[node name="Highlight" type="Line2D" parent="TimpaniProps/RightDrum"]
+points = PackedVector2Array(-5, -10, -3, -6)
+width = 1.0
+default_color = Color(0.843, 0.639, 0.416, 1)
+
+[node name="HeadRim" type="Polygon2D" parent="TimpaniProps/RightDrum"]
+position = Vector2(0, -12)
+scale = Vector2(9, 3.15)
+polygon = PackedVector2Array(1.000000, 0.000000, 0.923880, 0.382683, 0.707107, 0.707107, 0.382683, 0.923880, 0.000000, 1.000000, -0.382683, 0.923880, -0.707107, 0.707107, -0.923880, 0.382683, -1.000000, 0.000000, -0.923880, -0.382683, -0.707107, -0.707107, -0.382683, -0.923880, -0.000000, -1.000000, 0.382683, -0.923880, 0.707107, -0.707107, 0.923880, -0.382683)
+color = Color(0.294, 0.224, 0.208, 1)
+
+[node name="HeadSkin" type="Polygon2D" parent="TimpaniProps/RightDrum"]
+position = Vector2(0, -12)
+scale = Vector2(7.5, 2.625)
+polygon = PackedVector2Array(1.000000, 0.000000, 0.923880, 0.382683, 0.707107, 0.707107, 0.382683, 0.923880, 0.000000, 1.000000, -0.382683, 0.923880, -0.707107, 0.707107, -0.923880, 0.382683, -1.000000, 0.000000, -0.923880, -0.382683, -0.707107, -0.707107, -0.382683, -0.923880, -0.000000, -1.000000, 0.382683, -0.923880, 0.707107, -0.707107, 0.923880, -0.382683)
+color = Color(0.886, 0.776, 0.604, 1)
 
 [node name="EffectAnchor" type="Marker2D" parent="." unique_id=1432408629]
+position = Vector2(0, -24)
 
 [node name="AnimationPlayer" type="AnimationPlayer" parent="." unique_id=501211583]
+libraries/ = SubResource("AnimationLibrary_05i8d")
+autoplay = &"idle"

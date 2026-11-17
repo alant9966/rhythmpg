@@ -5,8 +5,9 @@ the supplied warrior sprite and guitar; Lyra uses the mage sprite and piano;
 Maro uses the fighter sprite and timpani.
 The Hollow Warden uses `Monster_4 SV Battler.png`, against `forest_clearing.png`.
 This is a fully 2D scene with a receding painted ground, staggered positions and
-sprite scales, contact shadows, foreground foliage, light shafts, and motes.
-The supplied battle sheets animate idle, attack, casting, damage, guard, victory,
+sprite scales, contact shadows, light shafts, and motes. Ambient color tint and
+added foliage overlays have been removed.
+The supplied battle sheets provide attack, casting, damage, guard, victory,
 and defeat poses; packed effect atlases provide impacts, fire, shielding, and healing.
 
 ## Playing the encounter
@@ -16,24 +17,26 @@ and defeat poses; packed effect atlases provide impacts, fire, shielding, and he
   second pause shortcut by default. The scene, enemy timers, animations, and
   audio all freeze. Resume includes a 0.85-second countdown to ready your hands.
 - Click a command or press **1–5**. Healing and tonics then ask for ally **1/2/3**.
-- **Plan the whole party first:** choose Rowan's action and play his rhythm, then
-  do the same for Lyra and Maro. The scores and targets are recorded; attacks,
-  healing, guarding, MP costs, and item consumption wait until planning is complete.
-  The party then executes its queue from **highest speed to lowest**, followed
-  by the enemy response. Speed ties use stable party order. The queue HUD shows
-  selected skills, scores, speed, and the actor currently planning or acting.
+- **Plan the whole party first:** choose each living ally's command and target.
+  No rhythm runs during planning. Allies and the Warden then share a speed-based
+  action sequence. Each ally plays their rhythm **immediately before their action**;
+  its score applies at once. Items execute without a performance. The order UI is
+  hidden; party cards show selected commands without predicting the action order.
 - **Warrior:** hold the displayed **S/D/F** shape for the whole action and strum
   with **Down/Up arrows**. Combat chooses among six strumming patterns; follow
   the actual arrow sequence shown for the current action.
 - **Mage:** use **D/F/J/K** for the falling notes, chords, and brief holds.
 - **Percussionist:** **left-click** the numbered circles in order. Click when
   the shrinking ring reaches the circle edge. The next target is gold.
-- Combat performances open a **large screen-filling overlay**, dimming the battle
-  behind it. Large lanes, arrows, highlighted frets, and a clear hit line replace
-  the former command-panel layout. The overlay scales to fit the viewport.
-  Current timing stays the same: a two-second preparation (an empty playfield for timpani), **120 BPM**, a
+- Combat performances stay **inside the battlefield**. A gentle camera move places
+  the active ally beside the rhythm playfield, keeps them bright, and dims the
+  rest of the scene. The combat HUD and former minigame card are hidden during
+  play. Only the gameplay, keybindings, and brief hit judgments remain; skill titles
+  and descriptions are hidden. Piano lanes,
+  guitar frets/strums, and timpani circles use the open space on the left.
+  Timing stays the same: a two-second empty preparation, **120 BPM**, a
   **0.65-second pickup**, and one bar (**2.65 seconds** of performance).
-  Rhythm Lab retains its one-second empty opening and longer practice charts.
+  Rhythm Lab retains its teaching layout, one-second opening, and longer charts.
 - Focus loss also opens global pause. **Backspace** deliberately resolves a
   combat performance at 0% accuracy; the action spends its turn and MP but has
   **no effect**. Esc always pauses without forfeiting. Backspace also returns from ally
@@ -58,10 +61,10 @@ under `user://saves`, written via a temporary file with a backup during replacem
 Invalid saves are rejected before the current scene changes.
 
 Combat saves capture the **latest planning point**, including HP/MP, shields,
-guard, enemy HP/statuses, round, tonics, completed queued selections, targets,
-rhythm scores, and performance history. Saving during an unfinished rhythm or
-queue animation restores that planning point. Completed selections stay queued;
-the unfinished selection is replayed. This prevents duplicate damage or item
+guard, speed effects, enemy HP/statuses, round, tonics, selected commands, targets,
+and performance history. Saving during a rhythm or action sequence restores
+the last planning point before execution. Earlier selections stay selected;
+the final command is selected again before replaying the sequence. This prevents duplicate damage or item
 costs from partially completed batches. Finished battles can
 also be saved. Practice saves restore the selected instrument, ready to start
 a new phrase; they do not resume a partially completed practice chart.
@@ -74,10 +77,14 @@ Earlier two-member combat saves add Maro when loaded.
 | Rowan, warrior / guitar | 180 / 24 | 24 / 8 / 14 / 15 | Downstroke; Rending Riff (6 MP); Iron Chorus (4 MP) |
 | Lyra, mage / piano | 124 / 32 | 10 / 30 / 8 / 12 | Spark; Flame Sonata (8 MP); Mending Chord (7 MP) |
 | Maro, percussionist / timpani | 148 / 28 | 28 / 14 / 12 / 10 | Drumstrike; Thunder Roll (8 MP); Rallying Beat (6 MP) |
-| Hollow Warden | 650 HP | ATK 39 / DEF 12 / RES 10 / SPD 10 | Telegraphed Heavy Cleave; every third round, Dissonant Wave hits the party |
+| Hollow Warden | 650 HP | ATK 39 / DEF 12 / RES 10 / SPD 13 | Telegraphed Heavy Cleave; every third round, Dissonant Wave hits the party |
 
 Planning proceeds in party order, skipping fallen allies. Action resolution uses
-the party's speed stats (normally Rowan 15 → Lyra 12 → Maro 10), then the Warden responds.
+all combatants' effective speed (normally Rowan 15 → Warden 13 → Lyra 12 → Maro 10).
+Ties use stable party order, with the Warden after tied allies. Before every action,
+the remaining actors are sorted again; haste and slow can reorder unacted
+combatants, and each combatant acts at most once. Fallen actors skip their action
+and its rhythm, and victory/defeat cancels the rest of the sequence.
 Heroes recover 2 MP each at the start of the next planning round, once per round.
 **Guard / Recover also launches the character's
 instrument minigame**; its protection and MP recovery depend on accuracy.
@@ -101,13 +108,13 @@ damage afterward. Exactly **100%** adds a skill-specific bonus; 99% does not.
 | --- | --- | --- |
 | Downstroke | 72 damage | Critical ×1.5: 108 damage |
 | Spark | 84 magic damage | Critical ×1.5: 126 damage |
-| Rending Riff | 112 damage | Expose: +25% incoming damage for 2 enemy turns |
+| Rending Riff | 112 damage and up to -4 enemy SPD | Expose: +25% incoming damage for 2 enemy turns |
 | Flame Sonata | 130 magic damage | Burn: 18 HP at the start of each of 2 enemy turns |
 | Iron Chorus | 34 shield HP for each living ally | ×1.5 shield potency: 51 HP |
 | Mending Chord | 80 HP to one living ally | Also restore 6 MP to that ally |
 | Drumstrike | 80 damage | Critical ×1.5: 120 damage |
 | Thunder Roll | 116 damage | Stagger: skip the Warden’s next response |
-| Rallying Beat | 4 MP restored to each living ally | Also heal each living ally by 20 HP |
+| Rallying Beat | 4 MP and up to +4 SPD to each living ally | Also heal each living ally by 20 HP |
 | Guard / Recover | 75% next-hit reduction and up to 4 MP, scaled by accuracy | Fully block the next hit and recover up to 8 MP |
 
 For example, a 50% Downstroke deals 36 damage; a 50% guard reduces the next hit
@@ -115,6 +122,67 @@ by 37.5%. Guard is consumed by the next incoming hit, including a party-wide
 attack. Shields absorb the remaining damage. HP/MP recovery is capped at the
 character's maximum. A burn kill prevents that enemy turn's attack. Partial
 Rending Riff and Flame Sonata do not apply expose/burn; those are perfect bonuses.
+
+Haste and slow magnitude from player skills scales with accuracy (minimum 1 on
+positive accuracy); 0% creates no effect. They last through the application
+round and the next two full rounds, and expire at round boundaries. Reapplying
+refreshes duration and keeps the stronger magnitude. Haste and slow coexist;
+effective speed is base speed + haste - slow, with a minimum of 1. Dissonant
+Wave also inflicts -3 SPD on each surviving ally for the same duration. A perfect
+Thunder Roll staggers the Warden's next action, even if it has already acted
+this round.
+
+### Editor-authored combat presentation
+
+`scenes/combat.tscn` owns the saved Battlefield, scenery, four actor instances,
+Effects container, rhythm overlay, and battle audio players. The controller
+references these nodes instead of constructing a duplicate stage. Only temporary
+effects are removed on restart. The 1200 × 800 design canvas fits the viewport
+without changing authored actor or scenery coordinates.
+
+`scenes/components/battle_actor.tscn` contains the sprite, shadow, timpani props,
+effect anchor, and AnimationPlayer. Hero idle cells 9–11 are pixel-identical, so
+heroes use a static frame 9 pose. The Warden loops its distinct first-row frames
+0 → 1 → 2 → 1. No idle animation changes sprite scale or offset. Chant, guard,
+hurt, attack, drum, cast, victory, and defeat remain saved frame animations. Hero sheets use 48 × 48 cells; the Warden uses 64 × 64 cells.
+Edit the instance texture, placement, scale, and child overrides in the editor.
+The HUD draws through the editor-owned HUD Control and `battle_hud_view.gd`.
+It uses serif headings, a vertical command list, portrait party columns, and a
+charcoal/ivory palette with restrained brass, sage HP, and slate MP accents.
+Command rows align shortcuts, names, and costs separately and support keyboard
+focus. Target buttons line up with the three party columns. The HUD can fade independently
+from the battlefield. It stays opaque through zoom-in, fades away only once the
+backdrop fills the lower area, and returns before the backdrop shrinks on zoom-out.
+Rhythm controls and notes reveal only after the HUD reaches zero opacity. Hidden
+rhythm input is not judged, and chart playback waits if the transition outlasts
+the normal preparation. The camera timing and framing remain unchanged.
+A ScreenBackdrop TextureRect covers the entire viewport behind the moving stage,
+including wide-screen margins. Command buttons and beatmap notes retain their
+script-driven implementation for the next UI migration pass.
+
+Typography pairs `ui/display_font.tres` (Palatino/Georgia/Noto Serif) headings
+with the shared scalable body font and theme in `ui/clear_font.tres` and
+`ui/clear_theme.tres`, with smooth UI filtering. The battlefield and actor sprites
+retain nearest filtering for their pixel artwork. The SystemFont selects Segoe UI
+on Windows, with Noto Sans/DejaVu Sans and platform fallbacks elsewhere.
+
+Select the combat root's **Rhythm Focus** properties in the Inspector to adjust
+camera zoom, actor enlargement, actor framing, and transition durations. Select RhythmOverlay to adjust
+**Dim Opacity**. Focus uses a 5% camera zoom and 4% actor enlargement, easing in over 1.1 seconds
+and out over 1 second after a 0.25-second HUD fade-in. Each action waits for the return to the full combat view.
+The dimmer fades with the camera and covers the entire viewport, including fitted
+canvas margins. Focus restores original positions, scales, and layers before
+an action resolves, and on restart/load; the real actor remains above
+the dimmer. `tests/test_presentation.gd` checks idle animation, text settings,
+focus, pause, reveal timing, and restoring the scene after a performance or
+interrupted zoom. `tests/test_menu_layout.gd` drives the real mouse input through
+commands and ally targeting, checks for HUD/playfield overlap, and finishes a round.
+The visual reference is the traditional command-menu treatment in
+[Octopath Traveler II](https://www.jp.square-enix.com/octopathtraveler2/system/);
+no external game artwork is copied into the interface.
+`tests/preview_menu.gd` renders commands, targeting, victory, pause, and practice
+for visual review. Pause and practice now fit the same 1200 × 800 design canvas
+so their typography and placement remain consistent at different window sizes.
 
 ### Beatmap variety
 
@@ -149,10 +217,13 @@ twelve perfectly playable keyboard maps, and shuffle-bag coverage/repeat prevent
 `tests/preview_combat_rework.gd` renders variation, miss, perfect, and guard states.
 
 `tests/test_action_queue.gd` checks deferred effects, speed changes and ties,
-stored rhythm scores, shared-item reservation, round recovery, fallen/revived
+execution-time rhythms, mixed enemy order, speed effects, shared-item reservation, round recovery, fallen/revived
 actors, early victory, pause, save/load, legacy-save migration, and Lab return.
 Run with `godot --headless --path . --script tests/test_action_queue.gd`.
-`tests/preview_action_queue.gd` renders planning and a full speed-ordered round.
+`godot --path . --rendering-method gl_compatibility --script tests/preview_combat_flow.gd`
+renders command selection, the guitar performance, an interleaved enemy turn,
+and the following piano/timpani performances. The older combat and action-queue
+preview entry points forward to this preview.
 
 Run `godot --headless --path . --script tests/test_shell.gd` for global pause,
 resume countdown, preparation, rebinding persistence/conflicts, slot creation,

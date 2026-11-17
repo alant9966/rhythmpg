@@ -46,16 +46,17 @@ func _ready() -> void:
 	add_child(layer)
 	veil = ColorRect.new()
 	veil.color = Color(0.015, 0.025, 0.04, 0.86)
-	veil.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	veil.set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT)
 	layer.add_child(veil)
 	panel = PanelContainer.new()
+	panel.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
 	panel.position = Vector2(175, 70)
 	panel.size = Vector2(850, 660)
 	var style := StyleBoxFlat.new()
-	style.bg_color = Color("152630")
-	style.border_color = Color("d7bd81")
+	style.bg_color = Color("191a17")
+	style.border_color = Color("8a7b59")
 	style.set_border_width_all(1)
-	style.set_corner_radius_all(8)
+	style.set_corner_radius_all(1)
 	style.content_margin_left = 30
 	style.content_margin_right = 30
 	style.content_margin_top = 22
@@ -65,8 +66,18 @@ func _ready() -> void:
 	content = VBoxContainer.new()
 	content.add_theme_constant_override("separation", 12)
 	panel.add_child(content)
+	_fit_menu()
+	get_viewport().size_changed.connect(_fit_menu)
 	layer.hide()
 	get_tree().auto_accept_quit = false
+
+func _fit_menu() -> void:
+	var available := get_viewport().get_visible_rect().size
+	var zoom := minf(available.x / 1200.0, available.y / 800.0)
+	layer.scale = Vector2.ONE * zoom
+	layer.offset = (available - Vector2(1200, 800) * zoom) * 0.5
+	veil.position = -layer.offset / zoom
+	veil.size = available / zoom
 
 func register_scene(scene: Node) -> void:
 	scene_ref = weakref(scene)
@@ -228,6 +239,8 @@ func _label(text: String, font_size: int = 18, color: Color = Color("e8eee9"), p
 	label.text = text
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	label.add_theme_font_size_override("font_size", font_size)
+	if font_size >= 24:
+		label.add_theme_font_override("font", preload("res://ui/display_font.tres"))
 	label.add_theme_color_override("font_color", color)
 	(parent if parent else content).add_child(label)
 	return label
@@ -236,6 +249,7 @@ func _button(text: String, action: Callable, parent: Node = null) -> Button:
 	var button := Button.new()
 	button.text = text
 	button.custom_minimum_size.y = 44
+	preload("res://rhythm/rhythm_theme.gd").button(button)
 	button.add_theme_font_size_override("font_size", 18)
 	button.pressed.connect(action)
 	(parent if parent else content).add_child(button)
@@ -248,7 +262,10 @@ func _render() -> void:
 		content.remove_child(child)
 		child.queue_free()
 	countdown = null
-	_label("R H Y T H M P G   /   P A U S E D", 15, Color("eaca8a"))
+	var panel_height := 480.0 if page == "main" else (360.0 if page == "quit" else 660.0)
+	panel.size = Vector2(850, panel_height)
+	panel.position = Vector2(175, (800 - panel_height) * 0.5)
+	_label("Paused", 15, Color("c5ae7b"))
 	if resume_left >= 0:
 		_label("Prepare to resume", 32)
 		_label("Place your hands on the current keys. The game and audio remain frozen until the countdown ends.")
@@ -257,7 +274,7 @@ func _render() -> void:
 		return
 	match page:
 		"main":
-			_label("Take a breath.", 34)
+			_label("Pause menu", 34)
 			_label("The battle, rhythm timing, animations, and audio are paused.", 16, Color("a5b4bd"))
 			_button("Resume game", resume_game)
 			_button("Save / Load", func(): _show_page("saves"))
@@ -315,7 +332,7 @@ func _render() -> void:
 			_label("Hold the displayed combination of %s frets. Use %s to strum down and %s to strum up at the hit line. In practice, change shapes when prompted. In combat, keep one shape for the phrase." % [" / ".join(lane_names("guitar")), key_name("strum_down"), key_name("strum_up")], 17, Color("e8eee9"), guide)
 			_label("TIMPANI · CIRCLESTRIKE", 20, Color("eaca8a"), guide)
 			_label("Aim with the mouse. Left-click numbered circles in order when the shrinking ring meets the target edge. Gold marks your next circle. Early or misplaced clicks count against accuracy.", 17, Color("e8eee9"), guide)
-			_label("Plan an action for each living ally. Scores are recorded first; the party acts from highest speed to lowest, then the enemy responds. Combat shuffles six maps per instrument. A 0% score fails, partial accuracy scales the action, and 100% unlocks its special bonus.", 16, Color("e8eee9"), guide)
+			_label("Plan an action for each living ally first. Allies and enemies act by speed; play each rhythm immediately before its action. Rending Riff slows the enemy, Rallying Beat hastes allies, and Dissonant Wave slows allies. Haste and slow change the order of remaining actions. Combat shuffles six maps per instrument. A 0% score fails, partial accuracy scales the action, and 100% unlocks its special bonus.", 16, Color("e8eee9"), guide)
 			_label("Esc pauses. %s backs out of targeting, resets practice, or resolves a combat phrase at 0%%. Choose allies with %s / %s / %s. Switch modes with %s." % [key_name("back"), key_name("command_1"), key_name("command_2"), key_name("command_3"), key_name("switch_mode")], 15, Color("a5b4bd"), guide)
 		"quit":
 			_label("Exit RhythmPG?", 32)
