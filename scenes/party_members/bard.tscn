@@ -98,7 +98,7 @@ animations = [{
 }]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_eae6q"]
-size = Vector2(19, 31)
+size = Vector2(13, 25)
 
 [node name="Bard" type="CharacterBody2D" unique_id=917108026]
 
@@ -108,5 +108,5 @@ animation = &"overworld_down"
 autoplay = "overworld_down"
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="." unique_id=717653751]
-position = Vector2(0.5, 8.5)
+position = Vector2(0.5, 11.5)
 shape = SubResource("RectangleShape2D_eae6q")
