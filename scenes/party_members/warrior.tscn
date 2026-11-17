@@ -1,0 +1,109 @@
+[gd_scene format=3 uid="uid://b4n0m0rht3v7b"]
+
+[ext_resource type="Texture2D" uid="uid://cx0ixrtavgk4g" path="res://assets/characters/chars_1.png" id="1_e86ku"]
+[ext_resource type="Script" uid="uid://dtgt7sqtpo4yi" path="res://scenes/party_members/player.gd" id="1_o2ahj"]
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_e86ku"]
+atlas = ExtResource("1_e86ku")
+region = Rect2(0, 0, 48, 48)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_o2ahj"]
+atlas = ExtResource("1_e86ku")
+region = Rect2(48, 0, 48, 48)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_l6v2i"]
+atlas = ExtResource("1_e86ku")
+region = Rect2(96, 0, 48, 48)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_ebcoj"]
+atlas = ExtResource("1_e86ku")
+region = Rect2(0, 48, 48, 48)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_x0kl1"]
+atlas = ExtResource("1_e86ku")
+region = Rect2(48, 48, 48, 48)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_cl31l"]
+atlas = ExtResource("1_e86ku")
+region = Rect2(96, 48, 48, 48)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_wwhv7"]
+atlas = ExtResource("1_e86ku")
+region = Rect2(0, 144, 48, 48)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_xyqpu"]
+atlas = ExtResource("1_e86ku")
+region = Rect2(48, 144, 48, 48)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_p81ce"]
+atlas = ExtResource("1_e86ku")
+region = Rect2(96, 144, 48, 48)
+
+[sub_resource type="SpriteFrames" id="SpriteFrames_o2ahj"]
+animations = [{
+"frames": [{
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_e86ku")
+}, {
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_o2ahj")
+}, {
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_l6v2i")
+}, {
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_o2ahj")
+}],
+"loop": 1,
+"name": &"overworld_down",
+"speed": 10.0
+}, {
+"frames": [{
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_ebcoj")
+}, {
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_x0kl1")
+}, {
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_cl31l")
+}, {
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_x0kl1")
+}],
+"loop": 1,
+"name": &"overworld_left",
+"speed": 5.0
+}, {
+"frames": [{
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_wwhv7")
+}, {
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_xyqpu")
+}, {
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_p81ce")
+}, {
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_xyqpu")
+}],
+"loop": 1,
+"name": &"overworld_up",
+"speed": 5.0
+}]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_eae6q"]
+size = Vector2(13, 24)
+
+[node name="Warrior" type="CharacterBody2D" unique_id=917108026]
+script = ExtResource("1_o2ahj")
+
+[node name="AnimatedSprite2D" type="AnimatedSprite2D" parent="." unique_id=819649181]
+sprite_frames = SubResource("SpriteFrames_o2ahj")
+animation = &"overworld_down"
+autoplay = "overworld_down"
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="." unique_id=717653751]
+position = Vector2(0.5, 11)
+shape = SubResource("RectangleShape2D_eae6q")

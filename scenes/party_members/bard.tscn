@@ -38,7 +38,7 @@ region = Rect2(336, 336, 48, 48)
 atlas = ExtResource("1_q16a0")
 region = Rect2(384, 336, 48, 48)
 
-[sub_resource type="SpriteFrames" id="SpriteFrames_eae6q"]
+[sub_resource type="SpriteFrames" id="SpriteFrames_q16a0"]
 animations = [{
 "frames": [{
 "duration": 1.0,
@@ -56,11 +56,6 @@ animations = [{
 "loop": 1,
 "name": &"overworld_down",
 "speed": 10.0
-}, {
-"frames": [],
-"loop": 1,
-"name": &"overworld_idle",
-"speed": 5.0
 }, {
 "frames": [{
 "duration": 1.0,
@@ -98,15 +93,15 @@ animations = [{
 }]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_eae6q"]
-size = Vector2(13, 25)
+size = Vector2(13, 24)
 
 [node name="Bard" type="CharacterBody2D" unique_id=917108026]
 
 [node name="AnimatedSprite2D" type="AnimatedSprite2D" parent="." unique_id=819649181]
-sprite_frames = SubResource("SpriteFrames_eae6q")
+sprite_frames = SubResource("SpriteFrames_q16a0")
 animation = &"overworld_down"
 autoplay = "overworld_down"
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="." unique_id=717653751]
-position = Vector2(0.5, 11.5)
+position = Vector2(0.5, 11)
 shape = SubResource("RectangleShape2D_eae6q")
