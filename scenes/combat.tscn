@@ -73,8 +73,6 @@ script = ExtResource("4_stage")
 
 [node name="Background" type="Sprite2D" parent="Battlefield" unique_id=363472203]
 z_index = -10
-position = Vector2(0, -42)
-scale = Vector2(0.938, 0.938)
 texture = ExtResource("2_qajva")
 centered = false
 
